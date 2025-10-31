@@ -1,0 +1,27 @@
+# ===============================
+# 🚀 IT Trend Hub Backend
+# FastAPI + Web Crawling + DB
+# ===============================
+
+# --- Web Framework ---
+fastapi==0.115.0
+uvicorn==0.32.0
+
+# --- HTTP Request & Parsing ---
+requests==2.32.3
+beautifulsoup4==4.12.3
+
+# --- Data & Caching ---
+pydantic==2.9.0
+python-dotenv==1.0.1
+
+# --- Database ---
+SQLAlchemy==2.0.35
+
+# --- Linting & Code Style (optional) ---
+flake8==7.1.1
+black==24.8.0
+autopep8==2.3.1
+
+# --- Optional: For async performance (recommended) ---
+httpx==0.27.0
