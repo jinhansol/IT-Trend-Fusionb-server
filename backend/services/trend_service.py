@@ -1,91 +1,52 @@
-import os
-import asyncio
-import openai
-from database.models import SessionLocal, UserInterest
+# flake8: noqa
+import os, asyncio, openai
+from datetime import datetime
+from database.mariadb import SessionLocal
+from database.models import UserInterest, TechTrend
 from services.news_service import get_latest_news
-from services.github_service import fetch_github_trends
-from services.career_service import get_job_postings
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+def save_trend_to_db(keyword, summary):
+    db = SessionLocal()
+    try:
+        db.add(TechTrend(keyword=keyword, summary=summary, fetched_at=datetime.utcnow()))
+        db.commit()
+    except Exception as e:
+        print(f"❌ DB 저장 실패: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 async def get_trend_recommendations():
-    """관심 키워드 기반 통합 추천"""
-
     db = SessionLocal()
     interests = db.query(UserInterest).all()
     db.close()
 
     if not interests:
-        return {
-            "message": "저장된 관심 키워드가 없습니다. /api/user/add 로 등록해주세요."
-        }
+        return {"message": "저장된 관심 키워드가 없습니다."}
 
-    keywords = [i.keyword for i in interests]
-    combined_results = []
-
-    # 🔹 키워드별 뉴스/GitHub/채용 결과 수집
-    for kw in keywords:
-        news = await asyncio.to_thread(get_latest_news, kw)
-        github = await asyncio.to_thread(fetch_github_trends, kw)
-        jobs = await asyncio.to_thread(get_job_postings, kw)
-        combined_results.append({
-            "keyword": kw,
-            "news": news[:3],
-            "github": github[:3],
-            "jobs": jobs[:3],
-        })
-
-    # 🔹 OpenAI로 요약 요청
-    summaries = []
-    for block in combined_results:
-        content = f"""
-        [키워드] {block['keyword']}
-        [뉴스] {', '.join([n['title'] for n in block['news']])}
-        [GitHub] {', '.join([g['name'] for g in block['github']])}
-        [채용] {', '.join([j['title'] for j in block['jobs']])}
-        """
+    results = []
+    for i in [kw.keyword for kw in interests]:
+        news = await asyncio.to_thread(get_latest_news, i)
+        text = f"[{i}] 관련 뉴스:\n" + "\n".join([n["title"] for n in news[:3]])
         try:
-            response = openai.ChatCompletion.create(
+            res = openai.ChatCompletion.create(
                 model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "당신은 IT 취준생과 개발자에게 트렌드를 요약해주는 AI 어시스턴트입니다."
-                        ),
-                    },
-                    {"role": "user", "content": content},
-                ],
-                max_tokens=200,
+                messages=[{"role": "user", "content": f"{text}의 핵심 트렌드를 요약해줘."}],
+                max_tokens=200
             )
-            summaries.append({
-                "keyword": block["keyword"],
-                "summary": response.choices[0].message.content.strip(),
-            })
+            summary = res.choices[0].message.content.strip()
+            save_trend_to_db(i, summary)
+            results.append({"keyword": i, "summary": summary})
         except Exception as e:
-            summaries.append({
-                "keyword": block["keyword"],
-                "summary": f"요약 생성 실패: {str(e)}",
-            })
+            results.append({"keyword": i, "summary": f"요약 실패: {e}"})
+    return {"recommendations": results}
 
-    return {
-        "message": "✅ 관심 키워드 기반 추천 생성 완료",
-        "keywords": keywords,
-        "recommendations": summaries,
-    }
-    
-    # 기존 코드 하단에 아래 함수 추가
 def get_ai_summary():
-    """AI 관련 기술 트렌드 인사이트"""
-    print("🧠 [trend_service] AI 인사이트 생성")
-    return {
-        "insights": [
-            {"title": "AI/Data Contributions", "percent": 23, "desc": "AI 관련 오픈소스 기여율 증가"},
-            {"title": "ML Framework Adoption", "percent": 67, "desc": "PyTorch 67% 채택률"},
-            {"title": "Rust Growth", "percent": 89, "desc": "Rust 리포지토리 성장률 급상승"},
-            {"title": "Developer Activity", "percent": 2.1, "unit": "M", "desc": "활성 개발자 210만 명"},
-            {"title": "Security Focus", "percent": 156, "desc": "보안 커밋 비율 증가"},
-        ]
-    }
-
+    db = SessionLocal()
+    try:
+        trends = db.query(TechTrend).order_by(TechTrend.fetched_at.desc()).limit(5).all()
+        return {"insights": [{"title": t.keyword, "desc": t.summary[:80]} for t in trends]}
+    finally:
+        db.close()

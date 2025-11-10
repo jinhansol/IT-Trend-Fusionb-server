@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { fetchHomeFeed } from "../api/homeAPI";
-import HeaderNav from "../components/HeaderNav";
 import NewsCard from "../components/NewsCard";
 import GithubChart from "../components/GithubChart";
 
@@ -12,30 +11,28 @@ export default function Home() {
     top_repos: [],
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const loadFeed = async () => {
       try {
-        const data = await fetchHomeFeed();
-        console.log("✅ [Home] API 응답:", data);
+        const res = await fetchHomeFeed();
+        console.log("✅ [Home] API 응답:", res);
 
-        // 안전하게 데이터 구조 보정
+        const data = res || {};
         setFeed({
-          insight: data?.insight || "이번 주 AI 트렌드를 불러오는 중입니다.",
-          news: Array.isArray(data?.news) ? data.news : [],
-          github_chart: Array.isArray(data?.github_chart)
+          insight: data.insight || "이번 주 IT 트렌드를 불러오는 중입니다.",
+          news: Array.isArray(data.news) ? data.news : [],
+          github_chart: Array.isArray(data.github_chart)
             ? data.github_chart
             : [],
-          top_repos: Array.isArray(data?.top_repos) ? data.top_repos : [],
+          top_repos: Array.isArray(data.top_repos)
+            ? data.top_repos
+            : [],
         });
       } catch (err) {
         console.error("❌ 홈 피드 로드 실패:", err);
-        setFeed({
-          insight: "데이터를 불러오는 중 오류가 발생했습니다.",
-          news: [],
-          github_chart: [],
-          top_repos: [],
-        });
+        setError("데이터를 불러오는 중 오류가 발생했습니다.");
       } finally {
         setLoading(false);
       }
@@ -44,26 +41,30 @@ export default function Home() {
   }, []);
 
   if (loading)
-    return <div className="text-center py-20 text-gray-400">⏳ Loading...</div>;
-
-  if (!feed)
     return (
-      <div className="text-center py-20 text-red-500">
-        ❌ No data available
+      <div className="flex flex-col items-center justify-center min-h-screen text-gray-400">
+        ⏳ Loading latest IT trends...
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-red-500">
+        ❌ {error}
       </div>
     );
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
       <main className="max-w-6xl mx-auto px-8 py-10">
-        {/* 🟢 AI Weekly Insight */}
-        <div className="bg-emerald-100 border border-emerald-200 rounded-xl p-5 mb-12 shadow-sm">
-          <h2 className="text-emerald-700 font-semibold text-lg mb-1">
+        {/* 💡 AI Weekly Insight */}
+        <div className="bg-gradient-to-r from-emerald-200 to-teal-100 border border-emerald-300 rounded-xl p-6 mb-12 shadow-sm">
+          <h2 className="text-emerald-800 font-semibold text-lg mb-1">
             💡 AI 주간 인사이트
           </h2>
-          <p className="text-gray-700 text-base leading-relaxed">
+          <p className="text-gray-800 text-base leading-relaxed">
             {feed.insight ||
-              "이번 주 AI 기술 트렌드 요약을 불러오는 중입니다."}
+              "이번 주 IT 기술 트렌드 요약을 불러오는 중입니다."}
           </p>
         </div>
 
@@ -73,17 +74,17 @@ export default function Home() {
             📰 최신 기술 뉴스
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {feed.news && feed.news.length > 0 ? (
-              feed.news.slice(0, 10).map((item, idx) => (
+          {feed.news && feed.news.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {feed.news.slice(0, 8).map((item, idx) => (
                 <NewsCard key={idx} item={item} />
-              ))
-            ) : (
-              <p className="col-span-4 text-gray-500 text-center">
-                표시할 뉴스가 없습니다.
-              </p>
-            )}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-10">
+              표시할 뉴스가 없습니다.
+            </p>
+          )}
         </section>
 
         {/* 💻 GitHub Trends */}
@@ -134,7 +135,7 @@ export default function Home() {
                         {repo.description || "요약 정보 없음"}
                       </p>
                       <p className="text-xs text-gray-500 mt-1 italic">
-                        💬 {repo.trend_summary || "트렌드 정보 없음"}
+                        💬 {repo.trend_summary || repo.growth || ""}
                       </p>
                     </li>
                   ))

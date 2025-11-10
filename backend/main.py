@@ -36,7 +36,6 @@ print(
 if not all([OPENAI_API_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET]):
     print("⚠️ 일부 환경 변수 누락 — .env 파일을 확인하세요.")
 
-
 # ---------------------------------------------------------
 # 2️⃣ FastAPI 앱 초기화
 # ---------------------------------------------------------
@@ -63,14 +62,11 @@ app.add_middleware(
 # ---------------------------------------------------------
 init_db()
 
-# 기존 구조 유지
 app.include_router(home_router.router, prefix="/api/home")
 app.include_router(career_router.router, prefix="/api/career")
 app.include_router(github_router.router, prefix="/api/github")
 app.include_router(news_router.router, prefix="/api/news")
 app.include_router(trend_router.router, prefix="/api/trend")
-
-# ✅ 새로운 DevDashboard 라우터 (언어 통계 / 성장률)
 app.include_router(dev_router.router)
 
 # ---------------------------------------------------------
