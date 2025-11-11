@@ -1,21 +1,38 @@
 # routers/career_router.py
-from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
-from services.career_service import crawl_all_jobs
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy.orm import Session
+from database.mariadb import SessionLocal
+from database.models import UserProfile, CareerJob
+from core.security import get_current_user
 
-router = APIRouter(tags=["Career"])  # ✅ prefix 삭제
+router = APIRouter(prefix="/api/career", tags=["Career"])
 
-@router.get("/jobs")
-async def get_career_jobs(keyword: str = Query("Python", description="검색할 키워드 (예: AI, 데이터, React 등)")):
-    """
-    ✅ IT 잡 공고 통합 API
-    - JobKorea (Selenium)
-    - Saramin (BeautifulSoup)
-    """
+def get_db():
+    db = SessionLocal()
     try:
-        print(f"\n🔍 [CareerRouter] /jobs 요청 수신 — keyword: {keyword}")
-        jobs = crawl_all_jobs(keyword=keyword, max_results=5)
-        return JSONResponse(content={"count": len(jobs), "results": jobs})
+        yield db
+    finally:
+        db.close()
+
+@router.get("")
+def personalized_career(
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ✅ 커리어 피드 — role_type(직무) 기반 채용 정보 추천
+    """
+    role = current_user.role_type or "개발자"
+    print(f"💼 [Career] {current_user.username} ({role})의 맞춤 채용 추천")
+
+    try:
+        results = (
+            db.query(CareerJob)
+            .filter(CareerJob.title.ilike(f"%{role}%"))
+            .order_by(CareerJob.posted_date.desc())
+            .limit(10)
+            .all()
+        )
+        return {"user": current_user.username, "role_type": role, "results": results}
     except Exception as e:
-        print(f"[CareerRouter Error] {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        raise HTTPException(status_code=500, detail=f"커리어 데이터 로드 오류: {e}")

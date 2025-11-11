@@ -1,58 +1,39 @@
-"""
-DevDashboard 전용 라우터
-- 언어 통계 / 성장률 / 트렌드 / AI 인사이트 통합 API
-"""
-
-from fastapi import APIRouter, HTTPException
-from services.github_service import (
-    get_top_languages,
-    get_language_growth_data,
-    fetch_github_trends,
-    generate_ai_insights,
-)
+# routers/dev_router.py
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from database.mariadb import SessionLocal
+from database.models import UserProfile, TechTrend
+from core.security import get_current_user
 
 router = APIRouter(prefix="/api/dev", tags=["Dev Dashboard"])
 
-# --------------------------------------------
-# 🔹 언어별 비율 데이터
-# --------------------------------------------
-@router.get("/lang-stats")
-def get_language_stats():
+def get_db():
+    db = SessionLocal()
     try:
-        data = get_top_languages()
-        return {"languages": data, "count": len(data)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"언어 통계 로드 오류: {e}")
+        yield db
+    finally:
+        db.close()
 
-# --------------------------------------------
-# 🔹 언어별 성장 추이 (12개월)
-# --------------------------------------------
-@router.get("/growth")
-def get_growth_trends():
-    try:
-        data = get_language_growth_data()
-        return {"growth": data, "months": len(data)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"성장 추이 로드 오류: {e}")
+@router.get("")
+def personalized_dev_dashboard(
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ✅ 개발자 대시보드 — 사용자 기술스택 기반 트렌드 추천
+    """
+    tech_stack = current_user.tech_stack or ["Python", "React"]
+    print(f"🧠 [DevDashboard] {current_user.username}님의 기술스택: {tech_stack}")
 
-# --------------------------------------------
-# 🔹 GitHub Trending 저장소 목록
-# --------------------------------------------
-@router.get("/repos")
-def get_repo_trends():
     try:
-        data = fetch_github_trends()
-        return {"repos": data, "count": len(data)}
+        results = (
+            db.query(TechTrend)
+            .filter(or_(*[TechTrend.keyword.ilike(f"%{tech}%") for tech in tech_stack]))
+            .order_by(TechTrend.fetched_at.desc())
+            .limit(10)
+            .all()
+        )
+        return {"user": current_user.username, "tech_stack": tech_stack, "results": results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"트렌드 리포 로드 오류: {e}")
-
-# --------------------------------------------
-# 🔹 AI 인사이트 + 트렌딩 토픽
-# --------------------------------------------
-@router.get("/insights")
-def get_ai_insight_summary():
-    try:
-        data = generate_ai_insights()
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI 인사이트 로드 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"Dev 트렌드 로드 오류: {e}")

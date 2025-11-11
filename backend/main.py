@@ -1,11 +1,11 @@
-"""🚀 IT Trend Hub 메인 엔트리포인트 — DevDashboard(개발자 대시보드) 라우터 통합 버전"""
+"""🚀 IT Trend Hub v2 메인 엔트리포인트 — 사용자 인증 + DevDashboard 통합 버전"""
 
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# ⚙️ 내부 모듈 import는 항상 최상단에서
+# ⚙️ 내부 모듈 import (항상 최상단 유지)
 from database.models import init_db
 from routers import (
     home_router,
@@ -13,11 +13,14 @@ from routers import (
     github_router,
     news_router,
     trend_router,
-    dev_router,   # ✅ 새로 추가된 DevDashboard 라우터
+    dev_router,
+    auth_router,   # ✅ 새로 추가된 인증 라우터
+    protected_router,
+    interest_router,
 )
 
 # ---------------------------------------------------------
-# 1️⃣ 환경 변수 로드
+# 1️⃣ 환경 변수 로드 (.env)
 # ---------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
@@ -39,10 +42,10 @@ if not all([OPENAI_API_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET]):
 # ---------------------------------------------------------
 # 2️⃣ FastAPI 앱 초기화
 # ---------------------------------------------------------
-app = FastAPI(title="IT Trend Hub API 🚀")
+app = FastAPI(title="IT Trend Hub v2 🚀")
 
 # ---------------------------------------------------------
-# 3️⃣ CORS 설정 (React 개발서버 허용)
+# 3️⃣ CORS 설정 (React 개발 서버 허용)
 # ---------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -62,12 +65,19 @@ app.add_middleware(
 # ---------------------------------------------------------
 init_db()
 
+# ✨ 인증 라우터 (회원가입 / 로그인)
+app.include_router(auth_router.router, prefix="/api/auth")
+
+# ✨ 기존 서비스 라우터
 app.include_router(home_router.router, prefix="/api/home")
 app.include_router(career_router.router, prefix="/api/career")
 app.include_router(github_router.router, prefix="/api/github")
 app.include_router(news_router.router, prefix="/api/news")
 app.include_router(trend_router.router, prefix="/api/trend")
 app.include_router(dev_router.router)
+app.include_router(auth_router.router,)
+app.include_router(protected_router.router)
+app.include_router(interest_router.router)
 
 # ---------------------------------------------------------
 # 5️⃣ 기본 루트 엔드포인트
@@ -75,4 +85,4 @@ app.include_router(dev_router.router)
 @app.get("/")
 def root():
     """서버 정상 작동 확인용"""
-    return {"message": "✅ IT Trend Hub Backend Running with DevDashboard!"}
+    return {"message": "✅ IT Trend Hub v2 Backend Running with Auth + DevDashboard!"}
