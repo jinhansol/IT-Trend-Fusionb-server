@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import LoginPopup from "../modals/LoginPopup";
 import SignupPopup from "../modals/SignupPopup";
 import InterestPopup from "../modals/InterestPopup";
@@ -9,143 +9,99 @@ export default function HeaderNav() {
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
   const [showInterest, setShowInterest] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
 
-  // ✅ 로그인 상태 유지
+  // 로그인 상태 유지
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
-  // ✅ 첫 로그인 시 관심사 팝업 자동 표시
+  // 첫 로그인 → 관심사 팝업 자동 표시
   useEffect(() => {
-    const isFirstLogin = localStorage.getItem("firstLogin");
-    if (isFirstLogin === "true") {
+    if (!user) return;
+
+    const first = localStorage.getItem("firstLogin");
+
+    if (first === "true") {
       setShowInterest(true);
       localStorage.setItem("firstLogin", "false");
     }
   }, [user]);
 
-  // ✅ 첫 로그인 후 main_focus 페이지 자동 이동
-  useEffect(() => {
-    if (user?.main_focus) {
-      const focus = (user.main_focus || "").toLowerCase();
-      const currentPath = location.pathname;
-
-      // 현재 경로가 이미 해당 focus 페이지면 이동 X
-      if (focus === "dev" && currentPath !== "/dev") navigate("/dev");
-      else if (focus === "career" && currentPath !== "/career") navigate("/career");
-      else if ((focus === "insight" || focus === "ai insight") && currentPath !== "/insight")
-        navigate("/insight");
-    }
-  }, [user, navigate, location]);
-
-  // ✅ 로그아웃
+  // 로그아웃
   const handleLogout = () => {
-    if (window.confirm("정말 로그아웃 하시겠어요? 👋")) {
-      localStorage.removeItem("user");
-      localStorage.removeItem("firstLogin");
-      setUser(null);
-      alert("로그아웃 되었습니다.");
-      navigate("/");
-    }
+    localStorage.removeItem("user");
+    localStorage.removeItem("firstLogin");
+    setUser(null);
   };
 
   const navItems = [
+    { name: "Home", path: "/" },
     { name: "Career", path: "/career" },
     { name: "Dev", path: "/dev" },
     { name: "AI Insight", path: "/insight" },
   ];
 
-  // ✅ 메뉴 표시만 제한 (페이지 접근은 허용)
   const filteredNavItems = navItems.filter((item) => {
     if (!user?.main_focus) return true;
 
-    const focus = (user.main_focus || "").toLowerCase();
+    const focus = user.main_focus.toLowerCase();
 
     if (focus === "career") return item.name !== "Dev";
     if (focus === "dev") return item.name !== "Career";
-    if (focus === "insight" || focus === "ai insight")
-      return item.name === "AI Insight";
+    if (focus === "insight") return item.name === "AI Insight" || item.name === "Home";
 
     return true;
   });
 
   return (
     <>
-      {/* 🧭 헤더 */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm">
+      <nav className="sticky top-0 z-50 bg-white border-b">
         <div className="max-w-7xl mx-auto flex justify-between items-center px-8 py-4">
-          
-          {/* 로고 */}
+
           <Link to="/" className="text-xl font-bold">
-            <span className="text-emerald-600">Dev</span>
-            <span className="text-gray-900">Hub</span>
+            <span className="text-emerald-600">Dev</span>Hub
           </Link>
 
-          {/* 중앙 메뉴 */}
-          <div className="hidden md:flex gap-8 text-gray-600">
+          <div className="hidden md:flex gap-8">
             {filteredNavItems.map((item) => (
               <NavLink
                 key={item.name}
                 to={item.path}
-                className={({ isActive }) =>
-                  `font-medium hover:text-emerald-600 transition-colors ${
-                    isActive ? "text-emerald-600 font-semibold" : ""
-                  }`
-                }
+                className="hover:text-emerald-600"
               >
                 {item.name}
               </NavLink>
             ))}
           </div>
 
-          {/* 우측 */}
-          <div className="flex items-center gap-4 text-sm text-gray-700">
+          <div className="flex items-center gap-4 text-sm">
             {!user ? (
               <>
-                <button
-                  onClick={() => setShowLogin(true)}
-                  className="hover:text-emerald-600 font-medium transition"
-                >
-                  Login
-                </button>
+                <button onClick={() => setShowLogin(true)}>Login</button>
                 <button
                   onClick={() => setShowSignup(true)}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium transition"
+                  className="bg-emerald-500 text-white px-4 py-2 rounded-lg"
                 >
                   Sign Up
                 </button>
               </>
             ) : (
-              <div className="flex items-center gap-3">
-                {/* 이름 클릭 → 관심사 팝업 */}
-                <div
-                  onClick={() => setShowInterest(true)}
-                  className="cursor-pointer hover:text-emerald-600 transition select-none"
-                  title="관심분야 수정"
-                >
-                  Welcome,&nbsp;
-                  <span className="font-semibold text-emerald-600">
-                    {user.username}
-                  </span>{" "}
-                  👋
-                </div>
+              <>
+                <span className="cursor-pointer" onClick={() => setShowInterest(true)}>
+                  Welcome, <strong>{user.username}</strong> 👋
+                </span>
 
-                <button
-                  onClick={handleLogout}
-                  className="border border-gray-300 px-3 py-1.5 rounded-md text-gray-600 hover:bg-gray-100 transition text-xs"
-                >
+                <button className="border px-3 py-1.5 rounded-md" onClick={handleLogout}>
                   Logout
                 </button>
-              </div>
+              </>
             )}
           </div>
         </div>
       </nav>
 
-      {/* 팝업 */}
+      {/* 팝업들 */}
       {showLogin && (
         <LoginPopup
           onClose={() => setShowLogin(false)}
@@ -153,12 +109,9 @@ export default function HeaderNav() {
             setShowLogin(false);
             setShowSignup(true);
           }}
-          setUser={(userData) => {
-            setUser(userData);
-            if (!localStorage.getItem("firstLogin")) {
-              localStorage.setItem("firstLogin", "true");
-            }
-            localStorage.setItem("user", JSON.stringify(userData));
+          setUser={(u) => {
+            setUser(u);
+            localStorage.setItem("user", JSON.stringify(u));
           }}
         />
       )}
@@ -170,10 +123,10 @@ export default function HeaderNav() {
             setShowSignup(false);
             setShowLogin(true);
           }}
-          setUser={(userData) => {
-            setUser(userData);
+          setUser={(u) => {
+            setUser(u);
+            localStorage.setItem("user", JSON.stringify(u));
             localStorage.setItem("firstLogin", "true");
-            localStorage.setItem("user", JSON.stringify(userData));
           }}
         />
       )}

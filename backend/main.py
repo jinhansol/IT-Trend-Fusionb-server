@@ -69,13 +69,13 @@ init_db()
 app.include_router(auth_router.router, prefix="/api/auth")
 
 # ✨ 기존 서비스 라우터
-app.include_router(home_router.router, prefix="/api/home")
-app.include_router(career_router.router, prefix="/api/career")
+app.include_router(home_router.router)
+app.include_router(career_router.router)
 app.include_router(github_router.router, prefix="/api/github")
 app.include_router(news_router.router, prefix="/api/news")
 app.include_router(trend_router.router, prefix="/api/trend")
 app.include_router(dev_router.router)
-app.include_router(auth_router.router,)
+app.include_router(auth_router.router)
 app.include_router(protected_router.router)
 app.include_router(interest_router.router)
 

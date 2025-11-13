@@ -1,26 +1,31 @@
+// src/api/devAPI.js
 import axios from "axios";
-const BASE_URL = "http://127.0.0.1:8000/api/dev";
 
-/** 🔹 언어 분포 데이터 (PieChart용) */
-export const fetchLanguageStats = async () => {
-  const res = await axios.get(`${BASE_URL}/lang-stats`);
-  return res.data.languages;
-};
+const BASE = "http://127.0.0.1:8000/api/dev";
 
-/** 🔹 인기 오픈소스 리포지토리 (리스트 + 그래프용) */
-export const fetchRepoTrends = async () => {
-  const res = await axios.get(`${BASE_URL}/repos`);
-  return res.data.repos;
-};
+function getHeaders() {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
-/** 🔹 AI 인사이트 (사이드 패널용) */
-export const fetchAiInsights = async () => {
-  const res = await axios.get(`${BASE_URL}/insights`);
-  return res.data.insights;
-};
+export const fetchDevTrends = async (keyword = "") => {
+  const token = localStorage.getItem("token");
+  const isLoggedIn = !!token;
 
-/** 🔹 Repository Growth 데이터 (LineChart용) */
-export const fetchGrowthData = async () => {
-  const res = await axios.get(`${BASE_URL}/growth`);
-  return res.data.growth;
+  const endpoint = isLoggedIn
+    ? `${BASE}/trend?keyword=${encodeURIComponent(keyword)}`
+    : `${BASE}/public?keyword=${encodeURIComponent(keyword)}`;
+
+  try {
+    console.log("📡 [DevAPI] 요청:", endpoint);
+
+    const res = await axios.get(endpoint, { headers: getHeaders() });
+    console.log("✅ [DevAPI] 응답:", res.data);
+
+    return res.data.results || [];
+
+  } catch (err) {
+    console.error("❌ [DevAPI] Error:", err);
+    return [];
+  }
 };

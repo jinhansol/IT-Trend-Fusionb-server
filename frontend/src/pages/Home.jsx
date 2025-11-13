@@ -1,45 +1,78 @@
+// Home.jsx (B안 — 최종 안정화 + 카테고리 설명 + 키워드 리스트 포함)
+
 import React, { useEffect, useState } from "react";
 import { fetchHomeFeed } from "../api/homeAPI";
 import NewsCard from "../components/NewsCard";
-import GithubChart from "../components/GithubChart";
+
+// 📊 Recharts
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+} from "recharts";
+
+// 🎨 색상 팔레트
+const COLORS = [
+  "#2563EB",
+  "#0EA5E9",
+  "#38BDF8",
+  "#4ADE80",
+  "#F87171",
+  "#A78BFA",
+  "#FB923C",
+];
 
 export default function Home() {
   const [feed, setFeed] = useState({
-    insight: "",
     news: [],
-    github_chart: [],
-    top_repos: [],
+    charts: {
+      category_ratio: [],
+      keyword_ranking: [],
+      weekly_trend: [],
+    },
   });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const token = localStorage.getItem("token");
+  const isLoggedIn = !!token;
+
+  // 🚀 홈 피드 로드
   useEffect(() => {
     const loadFeed = async () => {
       try {
         const res = await fetchHomeFeed();
-        console.log("✅ [Home] API 응답:", res);
+        const unifiedNews = res?.results || res?.news || [];
 
-        const data = res || {};
         setFeed({
-          insight: data.insight || "이번 주 IT 트렌드를 불러오는 중입니다.",
-          news: Array.isArray(data.news) ? data.news : [],
-          github_chart: Array.isArray(data.github_chart)
-            ? data.github_chart
-            : [],
-          top_repos: Array.isArray(data.top_repos)
-            ? data.top_repos
-            : [],
+          news: Array.isArray(unifiedNews) ? unifiedNews : [],
+          charts: res?.charts || {
+            category_ratio: [],
+            keyword_ranking: [],
+            weekly_trend: [],
+          },
         });
       } catch (err) {
-        console.error("❌ 홈 피드 로드 실패:", err);
         setError("데이터를 불러오는 중 오류가 발생했습니다.");
       } finally {
         setLoading(false);
       }
     };
-    loadFeed();
-  }, []);
 
+    loadFeed();
+  }, [isLoggedIn]);
+
+  // 로딩 화면
   if (loading)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-gray-400">
@@ -47,6 +80,7 @@ export default function Home() {
       </div>
     );
 
+  // 에러 화면
   if (error)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-red-500">
@@ -54,96 +88,129 @@ export default function Home() {
       </div>
     );
 
+  const { category_ratio, keyword_ranking, weekly_trend } = feed.charts;
+
+  // ========== 프론트엔드 렌더링 ==========
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
       <main className="max-w-6xl mx-auto px-8 py-10">
-        {/* 💡 AI Weekly Insight */}
-        <div className="bg-gradient-to-r from-emerald-200 to-teal-100 border border-emerald-300 rounded-xl p-6 mb-12 shadow-sm">
-          <h2 className="text-emerald-800 font-semibold text-lg mb-1">
-            💡 AI 주간 인사이트
-          </h2>
-          <p className="text-gray-800 text-base leading-relaxed">
-            {feed.insight ||
-              "이번 주 IT 기술 트렌드 요약을 불러오는 중입니다."}
-          </p>
-        </div>
 
-        {/* 📰 최신 기술 뉴스 */}
-        <section className="mt-10">
+        {/* 📰 최신 뉴스 */}
+        <section className="mt-6">
           <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
             📰 최신 기술 뉴스
           </h2>
 
-          {feed.news && feed.news.length > 0 ? (
+          {feed.news.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {feed.news.slice(0, 8).map((item, idx) => (
                 <NewsCard key={idx} item={item} />
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-10">
-              표시할 뉴스가 없습니다.
-            </p>
+            <p className="text-gray-500 text-center py-10">표시할 뉴스가 없습니다.</p>
           )}
         </section>
 
-        {/* 💻 GitHub Trends */}
-        <section className="mt-16">
-          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-            💻 GitHub Trends
-          </h2>
+        {/* 📊 기술 트렌드 분석 */}
+        <section className="mt-20">
+          <h2 className="text-2xl font-semibold mb-10">📊 IT 기술 트렌드 분석</h2>
 
-          <div className="grid grid-cols-[1.4fr,0.6fr] gap-8">
-            {/* 왼쪽: 언어별 성장 그래프 */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 h-[400px]">
-              <h3 className="text-base font-semibold text-gray-800 mb-4">
-                📊 언어별 성장 비율
-              </h3>
-              {feed.github_chart && feed.github_chart.length > 0 ? (
-                <GithubChart data={feed.github_chart} />
-              ) : (
-                <p className="text-gray-400 text-sm text-center pt-16">
-                  데이터를 불러오는 중입니다...
-                </p>
-              )}
-            </div>
+          {/* 1️⃣ 기술 카테고리 비중 */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-14">
+            <h3 className="font-semibold text-lg mb-4">기술 카테고리 비중</h3>
 
-            {/* 오른쪽: 인기 저장소 요약 */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 h-[400px] overflow-y-auto">
-              <h3 className="text-base font-semibold text-gray-800 mb-4">
-                ⭐ 인기 GitHub 저장소 요약
-              </h3>
-              <ul className="space-y-5">
-                {feed.top_repos && feed.top_repos.length > 0 ? (
-                  feed.top_repos.map((repo, idx) => (
-                    <li
-                      key={idx}
-                      className="border-l-4 border-indigo-500 pl-3 hover:bg-indigo-50 rounded-sm transition-all"
+            {category_ratio.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={category_ratio}
+                      dataKey="count"
+                      nameKey="category"
+                      outerRadius={110}
+                      label
                     >
-                      <a
-                        href={repo.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium text-indigo-600 hover:underline"
-                      >
-                        {repo.name}
-                      </a>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {repo.tag || "기타"}
-                      </p>
-                      <p className="text-sm text-gray-700 mt-1 leading-snug line-clamp-3">
-                        {repo.description || "요약 정보 없음"}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1 italic">
-                        💬 {repo.trend_summary || repo.growth || ""}
-                      </p>
-                    </li>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-sm">데이터가 없습니다.</p>
-                )}
-              </ul>
-            </div>
+                      {category_ratio.map((_, idx) => (
+                        <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+
+                {/* 카테고리 설명 리스트 */}
+                <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {category_ratio.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                      ></div>
+                      <span className="text-sm text-gray-700">
+                        {item.category} —{" "}
+                        <span className="font-semibold">{item.count}</span>건
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-gray-400 text-sm">데이터 없음</p>
+            )}
+          </div>
+
+          {/* 2️⃣ 키워드 TOP 20 */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-14">
+            <h3 className="font-semibold text-lg mb-4">핫 키워드 TOP 20</h3>
+
+            {keyword_ranking.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={keyword_ranking.slice(0, 10)}>
+                    <XAxis dataKey="keyword" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#2563EB" />
+                  </BarChart>
+                </ResponsiveContainer>
+
+                {/* 키워드 리스트 */}
+                <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {keyword_ranking.slice(0, 12).map((item, idx) => (
+                    <div key={idx} className="text-sm text-gray-700">
+                      🔹 <strong>{item.keyword}</strong> — {item.count}회
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-gray-400 text-sm">데이터 없음</p>
+            )}
+          </div>
+
+          {/* 3️⃣ 주별 기술 트렌드 변화 */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <h3 className="font-semibold text-lg mb-4">주별 기술 트렌드 변화</h3>
+
+            {weekly_trend.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={weekly_trend}>
+                  <XAxis dataKey="week" />
+                  <YAxis />
+                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <Line
+                    type="monotone"
+                    dataKey="count"
+                    stroke="#0EA5E9"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-gray-400 text-sm">데이터 없음</p>
+            )}
           </div>
         </section>
       </main>

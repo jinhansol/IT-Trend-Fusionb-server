@@ -90,16 +90,19 @@ class UserRecommendation(Base):
 # 📰 피드 기반 데이터 테이블
 # ---------------------------------------------------------
 class NewsFeed(Base):
-    """뉴스 데이터"""
     __tablename__ = "news_feed"
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(500), nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(255), nullable=False)
     summary = Column(Text)
+    content = Column(Text)
+    category = Column(String(50))
+    keywords = Column(Text)
     source = Column(String(100))
-    url = Column(String(500), nullable=False)
-    published_at = Column(DateTime, default=datetime.utcnow)
+    url = Column(String(500))
+    published_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
+
 
 
 class CareerJob(Base):

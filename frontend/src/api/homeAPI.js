@@ -1,19 +1,28 @@
-// ✅ Home Feed API — 뉴스 + GitHub + 인사이트 통합
-export async function fetchHomeFeed(keyword = "AI 트렌드") {
+export async function fetchHomeFeed(keyword = null) {
+  const token = localStorage.getItem("token");
+  const isLoggedIn = !!token;
+
+  const query = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
+
+  const endpoint = isLoggedIn
+    ? `http://127.0.0.1:8000/api/home/feed${query}`
+    : `http://127.0.0.1:8000/api/home/public${query}`;   // 🔥 여기 수정!
+
   try {
-    const res = await fetch(
-      `http://127.0.0.1:8000/api/home/feed?keyword=${encodeURIComponent(
-        keyword
-      )}`
-    );
+    console.log("📡 [HomeAPI] 요청:", endpoint);
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
+    const res = await fetch(endpoint, {
+      headers: isLoggedIn ? { Authorization: `Bearer ${token}` } : {},
+    });
 
-    return res.json();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    console.log("✅ [HomeAPI] 응답:", data);
+    return data;
+
   } catch (err) {
-    console.error("❌ [homeAPI] Error:", err);
-    return { news: [], insight: "", github_chart: [], top_repos: [] };
+    console.error("❌ [HomeAPI] Error:", err);
+    return { insight: "", results: [], github_chart: [], top_repos: [] };
   }
 }

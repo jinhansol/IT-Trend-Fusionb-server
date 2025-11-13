@@ -17,19 +17,16 @@ export default function NewsCard({ item }) {
       rel="noopener noreferrer"
       className="block bg-white border border-gray-100 rounded-xl p-6 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all duration-200"
     >
-      {/* 📰 뉴스 제목 */}
       <h3 className="text-[16px] font-semibold text-gray-900 leading-snug mb-3 line-clamp-3">
         {item.title}
       </h3>
 
-      {/* 🧠 AI 요약문 */}
       {item.summary && (
         <p className="text-[14px] text-gray-700 mb-4 leading-relaxed line-clamp-4">
           {item.summary}
         </p>
       )}
 
-      {/* 🔹 구분선 + 출처 */}
       <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
         <span className={`text-xs font-medium ${sourceColor}`}>
           {item.source}
