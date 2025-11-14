@@ -3,12 +3,13 @@ import React from "react";
 export default function NewsCard({ item }) {
   if (!item) return null;
 
+  // 도메인 기반 색상 (옵션)
+  const domain = item.source?.toLowerCase() || "";
+
   const sourceColor =
-    item.source === "Google News"
-      ? "text-blue-500"
-      : item.source === "Naver News"
-      ? "text-green-600"
-      : "text-gray-500";
+    domain.includes("zdnet") ? "text-red-600" :
+    domain.includes("etnews") ? "text-blue-600" :
+    "text-gray-500";
 
   return (
     <a

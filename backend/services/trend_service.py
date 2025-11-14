@@ -1,15 +1,16 @@
 # flake8: noqa
 """
-🧠 Trend Service — 유저 관심사 기반 트렌드 분석 & AI 요약
-(DB 구조: UserProfile.interest_topics 기준)
+🧠 Trend Service — 관심사 기반 + DB 뉴스 기반 트렌드 요약
 """
 
-import os, asyncio, openai
+import os, asyncio
 from datetime import datetime
+import openai
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+
 from database.mariadb import SessionLocal
-from database.models import UserProfile, TechTrend
-from services.news_service import get_latest_news
+from database.models import UserProfile, TechTrend, NewsFeed
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -31,67 +32,98 @@ def save_trend_to_db(keyword: str, summary: str):
 
 
 # ---------------------------------------------------------
-# 🔍 관심사 기반 트렌드 추천 생성
+# 🔍 관심사 기반 트렌드 추천 (DB 기반)
 # ---------------------------------------------------------
 async def get_trend_recommendations(user_id: int):
     """
-    로그인한 사용자의 관심 키워드 기반으로 최신 트렌드 생성
+    관심 키워드 기반으로 DB에 저장된 최신 뉴스들을 분석하여
+    트렌드 요약 생성
     """
     db = SessionLocal()
-    user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
-    db.close()
 
+    # 1) 사용자 정보
+    user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
     if not user:
+        db.close()
         return {"message": "❌ 사용자를 찾을 수 없습니다."}
 
     interests = user.interest_topics or []
     if not interests:
-        return {"message": "ℹ️ 저장된 관심 키워드가 없습니다."}
+        db.close()
+        return {"message": "ℹ 관심 키워드가 없습니다."}
 
     results = []
-    for keyword in interests:
-        # 최신 뉴스 가져오기
-        news = await asyncio.to_thread(get_latest_news, keyword)
-        titles = [n["title"] for n in news[:3]] if news else []
-        text = f"[{keyword}] 관련 뉴스:\n" + "\n".join(titles)
 
+    # 2) 키워드별 뉴스 검색 → 최근 3개만
+    for keyword in interests:
+
+        # DB 뉴스 검색
+        news_items = (
+            db.query(NewsFeed)
+            .filter(
+                or_(
+                    NewsFeed.title.ilike(f"%{keyword}%"),
+                    NewsFeed.summary.ilike(f"%{keyword}%"),
+                    NewsFeed.keywords.ilike(f"%{keyword}%"),
+                )
+            )
+            .order_by(NewsFeed.published_at.desc())
+            .limit(3)
+            .all()
+        )
+
+        titles = [item.title for item in news_items]
+        text = f"[{keyword}] 관련 최신 뉴스 제목:\n" + "\n".join(titles)
+
+        # 3) GPT에게 요약 요청
         try:
-            # GPT 기반 트렌드 요약
             res = openai.ChatCompletion.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "당신은 기술 트렌드 전문가입니다."},
-                    {"role": "user", "content": f"{text}의 핵심 트렌드를 간결하게 요약해줘."},
+                    {"role": "system", "content": "당신은 IT 기술 트렌드 분석 전문가입니다."},
+                    {"role": "user", "content": f"{text}\n\n위 내용을 기반으로 핵심 트렌드를 3~4문장으로 요약해줘."},
                 ],
                 max_tokens=200,
             )
 
             summary = res.choices[0].message.content.strip()
             save_trend_to_db(keyword, summary)
+
             results.append({"keyword": keyword, "summary": summary})
 
         except Exception as e:
             print(f"⚠️ {keyword} 요약 실패: {e}")
             results.append({"keyword": keyword, "summary": f"요약 실패: {e}"})
 
+    db.close()
     return {"recommendations": results}
 
 
 # ---------------------------------------------------------
-# 📊 AI 요약 (최신 트렌드 요약 리스트)
+# 📊 AI 요약 (홈 화면 인사이트)
 # ---------------------------------------------------------
 def get_ai_summary():
     """
-    DB에 저장된 최근 트렌드 5개를 요약본으로 반환
+    최근 생성된 트렌드 5개 기반 홈 화면 인사이트
     """
     db = SessionLocal()
     try:
-        trends = db.query(TechTrend).order_by(TechTrend.fetched_at.desc()).limit(5).all()
+        trends = (
+            db.query(TechTrend)
+            .order_by(TechTrend.fetched_at.desc())
+            .limit(5)
+            .all()
+        )
+
         return {
             "insights": [
-                {"title": t.keyword, "desc": t.summary[:120] + ("..." if len(t.summary) > 120 else "")}
+                {
+                    "title": t.keyword,
+                    "desc": (t.summary[:150] + "...") if len(t.summary) > 150 else t.summary
+                }
                 for t in trends
             ]
         }
+
     finally:
         db.close()

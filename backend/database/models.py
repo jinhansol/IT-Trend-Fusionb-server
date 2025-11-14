@@ -97,7 +97,7 @@ class NewsFeed(Base):
     summary = Column(Text)
     content = Column(Text)
     category = Column(String(50))
-    keywords = Column(Text)
+    keywords = Column(JSON)
     source = Column(String(100))
     url = Column(String(500))
     published_at = Column(DateTime)

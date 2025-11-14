@@ -1,13 +1,19 @@
 # flake8: noqa
-"""🚀 실시간 뉴스 수집 + AI 요약 + 카테고리/키워드 태깅 + DB 저장 통합"""
+"""
+🔥 IT 뉴스 통합 크롤링 + AI 요약/카테고리/키워드 + DB 저장 (최종 안정화 버전 — 매체당 3개 제한)
+"""
 
 import os
+import time
 import json
 import requests
 import feedparser
 from datetime import datetime
-from urllib.parse import urljoin
+from typing import List, Dict
+from urllib.parse import urlparse, urlunparse
+
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
 from openai import OpenAI
 
 from database.mariadb import SessionLocal
@@ -15,289 +21,249 @@ from database.models import NewsFeed
 
 load_dotenv()
 
-NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
-NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# ----------------------------------------------------------
+# 1. RSS 소스 (국내 + 해외)
+# ----------------------------------------------------------
 
+IT_FEEDS = [
+    # 🇰🇷 ZDNet
+    "https://www.zdnet.co.kr/Include/news.xml",
+    "https://www.zdnet.co.kr/Include/news_ai.xml",
+    "https://www.zdnet.co.kr/Include/news_cloud.xml",
+    "https://www.zdnet.co.kr/Include/news_security.xml",
 
-# -----------------------------
-# 🔧 URL 통합 함수
-# -----------------------------
-def extract_url(item: dict) -> str:
-    """Google/Naver 혼합 구조에서 안전하게 URL만 뽑아냄"""
-    return (item.get("url") or item.get("link") or "").strip()
+    # 🇰🇷 ETNews
+    "https://rss.etnews.com/Section903.xml",
+    "https://rss.etnews.com/AI.xml",
+    "https://rss.etnews.com/Cloud.xml",
+    "https://rss.etnews.com/Security.xml",
+    "https://rss.etnews.com/Semicon.xml",
 
+    # 🇰🇷 기타
+    "https://www.itworld.co.kr/rss/all.xml",
+    "https://www.ciokorea.com/rss/all.xml",
+    "https://koreaittimes.com/rss/allArticle.xml",
+    "https://www.ddaily.co.kr/news/rss/allArticle.xml",
+    "https://www.bloter.net/rss",
+    "https://www.boannews.com/media/rss.xml",
 
-# -----------------------------
-# 🧠 LLM 요약
-# -----------------------------
-def summarize_text(title: str) -> str:
-    if not title:
-        return ""
-    try:
-        res = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"다음 뉴스 제목을 한국어로 1~2문장으로 간결하게 요약해줘:\n\n{title}",
-                }
-            ],
-            temperature=0.4,
-        )
-        return res.choices[0].message.content.strip()
-    except Exception:
-        return ""
-
-
-# -----------------------------
-# 🧠 LLM 카테고리 / 키워드 추출
-# -----------------------------
-BASE_CATEGORIES = [
-    "AI / ML",
-    "Frontend",
-    "Backend",
-    "Cloud",
-    "DevOps",
-    "Security",
-    "Data / Analytics",
-    "Mobile",
-    "Game",
-    "Open Source",
-    "Other",
+    # 🇺🇸 해외 IT 전문
+    "https://techcrunch.com/feed/",
+    "https://www.wired.com/feed/category/business/latest/rss",
+    "https://www.theverge.com/rss/index.xml",
+    "http://feeds.arstechnica.com/arstechnica/index",
+    "https://venturebeat.com/feed/",
+    "https://feeds.infoq.com/",
+    "http://rss.slashdot.org/Slashdot/slashdotMain",
 ]
 
 
-def extract_tags_with_llm(title: str, summary: str) -> dict:
-    """
-    LLM으로부터 카테고리(1~2개) + 키워드(5~10개)를 JSON 형식으로 받아옴.
-    출력이 코드블록/텍스트 섞여 있어도 최대한 JSON만 파싱.
-    """
+# ----------------------------------------------------------
+# URL 정규화 (쿼리/해시 제거)
+# ----------------------------------------------------------
+def normalize_url(url: str) -> str:
     try:
-        prompt = f"""
-다음 IT/기술 뉴스의 주제 카테고리와 대표 키워드를 추출해줘.
+        p = urlparse(url)
+        return urlunparse(p._replace(query="", fragment=""))
+    except:
+        return url
 
-- category: 아래 리스트에서 1~2개만 고르고, 없으면 "Other" 사용
-{BASE_CATEGORIES}
 
-- keywords: 5~10개, 한국어/영어 섞여도 되고, 한 단어 또는 짧은 구문 위주
+# ----------------------------------------------------------
+# RSS → 매체별 기사 그룹화
+# ----------------------------------------------------------
+def fetch_grouped_rss() -> Dict[str, List[Dict]]:
+    grouped = {}
 
-반드시 JSON만 출력해.
-형식 예시:
-{{
-  "category": ["AI / ML"],
-  "keywords": ["챗봇", "LLM", "오픈AI", "생성형 AI", "모델 업데이트"]
-}}
+    for feed_url in IT_FEEDS:
+        parsed = feedparser.parse(feed_url)
+        source = urlparse(feed_url).netloc
 
-뉴스 제목: {title}
-뉴스 요약: {summary}
-"""
-        res = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-        )
-        raw = res.choices[0].message.content.strip()
+        if source not in grouped:
+            grouped[source] = []
 
-        # 코드블록/텍스트 섞인 경우 대비해서 { ... } 부분만 추출
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start == -1 or end == -1:
-            return {"category": [], "keywords": []}
-
-        json_str = raw[start : end + 1]
-        data = json.loads(json_str)
-
-        cats = data.get("category") or data.get("categories") or []
-        kws = data.get("keywords") or []
-
-        # 문자열 하나만 온 경우 리스트로 감싸기
-        if isinstance(cats, str):
-            cats = [cats]
-        if isinstance(kws, str):
-            kws = [kws]
-
-        # 베이스 카테고리 외의 값은 Other로 처리
-        normalized_cats = []
-        for c in cats:
-            c = str(c).strip()
-            if not c:
+        for entry in parsed.entries:
+            url = entry.get("link", "").strip()
+            title = entry.get("title", "").strip()
+            if not url or not title:
                 continue
-            if c in BASE_CATEGORIES:
-                normalized_cats.append(c)
-            else:
-                normalized_cats.append("Other")
 
-        if not normalized_cats:
-            normalized_cats = ["Other"]
-
-        # 키워드는 공백 제거 + 중복 제거
-        clean_kws = []
-        seen = set()
-        for k in kws:
-            k = str(k).strip()
-            if not k or k.lower() in seen:
-                continue
-            seen.add(k.lower())
-            clean_kws.append(k)
-
-        return {
-            "category": normalized_cats,
-            "keywords": clean_kws[:10],  # 최대 10개
-        }
-
-    except Exception:
-        return {"category": [], "keywords": []}
-
-
-# -----------------------------
-# 🌍 Google 뉴스
-# -----------------------------
-def fetch_google_news(limit: int = 4):
-    url = "https://news.google.com/rss/search?q=technology&hl=en&gl=US&ceid=US:en"
-    feed = feedparser.parse(url)
-
-    results = []
-    for entry in feed.entries[:limit]:
-        link = urljoin("https://news.google.com/", entry.link)
-
-        published = (
-            datetime(*entry.published_parsed[:6])
-            if hasattr(entry, "published_parsed")
-            else datetime.utcnow()
-        )
-
-        title = entry.title
-        summary = summarize_text(title)
-
-        tags = extract_tags_with_llm(title, summary)
-
-        results.append(
-            {
-                "source": "Google News",
+            grouped[source].append({
                 "title": title,
-                "summary": summary,
-                "url": link,
-                "published_at": published,
-                "category": tags["category"],
-                "keywords": tags["keywords"],
-            }
+                "url": normalize_url(url),
+                "summary": entry.get("summary", "").strip(),
+                "published": entry.get("published", ""),
+                "source": source,
+            })
+
+    return grouped
+
+
+# ----------------------------------------------------------
+# 매체당 최신 N개만 선택
+# ----------------------------------------------------------
+MAX_PER_SOURCE = 3
+
+def get_limited_items() -> List[Dict]:
+    grouped = fetch_grouped_rss()
+    limited = []
+
+    for source, items in grouped.items():
+        # published 기준으로 최신순 정렬
+        sorted_items = sorted(
+            items,
+            key=lambda x: x["published"] or "",
+            reverse=True
         )
 
-    return results
+        limited.extend(sorted_items[:MAX_PER_SOURCE])
+
+    return limited
 
 
-# -----------------------------
-# 🇰🇷 Naver 뉴스
-# -----------------------------
-def fetch_naver_news(keyword: str = "IT", limit: int = 4):
-    url = "https://openapi.naver.com/v1/search/news.json"
-    headers = {
-        "X-Naver-Client-Id": NAVER_CLIENT_ID,
-        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-    }
-    params = {"query": keyword, "display": limit, "sort": "date"}
-
-    res = requests.get(url, headers=headers, params=params, timeout=8)
-    items = res.json().get("items", [])
-
-    results = []
-    for item in items:
-        clean_title = item["title"].replace("<b>", "").replace("</b>", "")
-
-        try:
-            pub = datetime.strptime(item["pubDate"], "%a, %d %b %Y %H:%M:%S %z")
-            published = pub.astimezone().replace(tzinfo=None)
-        except Exception:
-            published = datetime.utcnow()
-
-        summary = summarize_text(clean_title)
-        tags = extract_tags_with_llm(clean_title, summary)
-
-        results.append(
-            {
-                "source": "Naver News",
-                "title": clean_title,
-                "summary": summary,
-                "url": item["link"],
-                "published_at": published,
-                "category": tags["category"],
-                "keywords": tags["keywords"],
-            }
-        )
-
-    return results
+# ----------------------------------------------------------
+# 본문 크롤링
+# ----------------------------------------------------------
+def clean_text(text: str) -> str:
+    return "\n".join([t.strip() for t in text.split("\n") if t.strip()])
 
 
-# -----------------------------
-# 🧩 통합 + 중복 제거
-# -----------------------------
-def get_latest_news(keyword: str = "IT", limit: int = 8):
-    google = fetch_google_news(limit // 2)
-    naver = fetch_naver_news(keyword, limit // 2)
-
-    news = google + naver
-
-    seen = set()
-    unique = []
-
-    for n in news:
-        url = extract_url(n)
-        key = (n["title"].lower(), url)
-
-        if key not in seen:
-            seen.add(key)
-            unique.append(n)
-
-    return unique
-
-
-# -----------------------------
-# 💾 DB 저장
-# -----------------------------
-def save_news_to_db(keyword: str = "IT"):
-    """
-    - 최신 뉴스 수집 (Google + Naver)
-    - 요약 + 카테고리 + 키워드 태깅
-    - news_feed 테이블에 중복 없이 저장
-    """
-    db = SessionLocal()
-
+def fetch_article_content(url: str) -> str:
     try:
-        news_items = get_latest_news(keyword)
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
 
-        existing = db.query(NewsFeed.title, NewsFeed.source, NewsFeed.url).all()
-        existing_set = {(t.lower(), s, u) for t, s, u in existing}
+        selectors = [
+            "article", "#articleBody", "#articleBodyContents",
+            ".article_body", ".art_txt", "section.article"
+        ]
 
-        added = 0
-        for n in news_items:
-            key = (n["title"].lower(), n["source"], n["url"])
-            if key in existing_set:
-                continue
+        for sel in selectors:
+            node = soup.select_one(sel)
+            if node:
+                return clean_text(node.get_text(separator="\n"))
 
-            record = NewsFeed(
-                title=n["title"],
-                summary=n["summary"],
-                source=n["source"],
-                url=n["url"],
-                published_at=n["published_at"],
-                # LLM 태깅 결과를 JSON 문자열로 저장
-                content=None,
-                category=json.dumps(n.get("category", []), ensure_ascii=False),
-                keywords=json.dumps(n.get("keywords", []), ensure_ascii=False),
-            )
-
-            db.add(record)
-            added += 1
-
-        db.commit()
-        print(f"💾 {added}개 뉴스 저장됨")
+        return clean_text(soup.get_text(separator="\n"))
 
     except Exception as e:
+        print(f"[ERROR] fetch_article_content: {e}")
+        return ""
+
+
+# ----------------------------------------------------------
+# AI 요약
+# ----------------------------------------------------------
+def analyze_article(title: str, content: str):
+    prompt = f"""
+    아래는 IT 관련 뉴스 기사입니다.
+
+    제목:
+    {title}
+
+    본문(요약용):
+    {content[:4000]}
+
+    아래 JSON 형식으로만 반환하세요:
+
+    {{
+      "summary": "...",
+      "category": "AI/보안/모바일/클라우드/정책/스타트업/기타 중 하나",
+      "keywords": ["...", "...", "..."]
+    }}
+    """
+    try:
+        res = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        raw = res.choices[0].message.content
+        cleaned = raw.replace("```json", "").replace("```", "").strip()
+        return json.loads(cleaned)
+
+    except:
+        return {"summary": "", "category": "기타", "keywords": ["IT"]}
+
+
+# ----------------------------------------------------------
+# 날짜 파싱
+# ----------------------------------------------------------
+def parse_published_date(raw: str):
+    try:
+        parsed = feedparser._parse_date(raw)
+        if parsed:
+            return datetime(*parsed[:6])
+    except:
+        pass
+    return datetime.utcnow()
+
+
+# ----------------------------------------------------------
+# DB 중복 체크
+# ----------------------------------------------------------
+def exists_in_db(url, title):
+    db = SessionLocal()
+    exists = (
+        db.query(NewsFeed)
+        .filter((NewsFeed.url == url) | (NewsFeed.title == title))
+        .first()
+    )
+    db.close()
+    return exists
+
+
+# ----------------------------------------------------------
+# DB 저장
+# ----------------------------------------------------------
+def save_news(item, ai, content):
+    db = SessionLocal()
+    try:
+        news = NewsFeed(
+            title=item["title"],
+            summary=ai.get("summary", ""),
+            content=content,
+            category=ai.get("category", "기타"),
+            keywords=json.dumps(ai.get("keywords", ["IT"]), ensure_ascii=False),
+            source=item["source"],
+            url=item["url"],
+            published_at=parse_published_date(item["published"]),
+            created_at=datetime.utcnow(),
+        )
+        db.add(news)
+        db.commit()
+        print(" - 저장 완료")
+
+    except Exception as e:
+        print(f"[ERROR] DB 저장 실패: {e}")
         db.rollback()
-        print("❌ DB 저장 오류:", e)
 
     finally:
         db.close()
+
+
+# ----------------------------------------------------------
+# 메인 파이프라인
+# ----------------------------------------------------------
+def run_news_pipeline():
+    limited_items = get_limited_items()
+    print(f"[INFO] 매체당 3개 제한 → 총 {len(limited_items)}개 기사 처리")
+
+    for idx, item in enumerate(limited_items, start=1):
+        print(f"\n[{idx}/{len(limited_items)}] {item['title']}")
+
+        if exists_in_db(item["url"], item["title"]):
+            print(" - DB 중복 → Skip")
+            continue
+
+        content = fetch_article_content(item["url"])
+        if len(content) < 150:
+            print(" - 본문 부족 → Skip")
+            continue
+
+        ai = analyze_article(item["title"], content)
+        save_news(item, ai, content)
+
+        time.sleep(0.8)

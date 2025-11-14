@@ -1,5 +1,4 @@
-// Home.jsx (B안 — 최종 안정화 + 카테고리 설명 + 키워드 리스트 포함)
-
+// Home.jsx — PUBLIC 전용 최종 버전
 import React, { useEffect, useState } from "react";
 import { fetchHomeFeed } from "../api/homeAPI";
 import NewsCard from "../components/NewsCard";
@@ -44,25 +43,22 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("token");
-  const isLoggedIn = !!token;
-
   // 🚀 홈 피드 로드
   useEffect(() => {
     const loadFeed = async () => {
       try {
         const res = await fetchHomeFeed();
-        const unifiedNews = res?.results || res?.news || [];
 
         setFeed({
-          news: Array.isArray(unifiedNews) ? unifiedNews : [],
-          charts: res?.charts || {
+          news: res.news || [],
+          charts: res.charts || {
             category_ratio: [],
             keyword_ranking: [],
             weekly_trend: [],
           },
         });
       } catch (err) {
+        console.error(err);
         setError("데이터를 불러오는 중 오류가 발생했습니다.");
       } finally {
         setLoading(false);
@@ -70,27 +66,31 @@ export default function Home() {
     };
 
     loadFeed();
-  }, [isLoggedIn]);
+  }, []);
 
-  // 로딩 화면
-  if (loading)
+  // 로딩
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-gray-400">
-        ⏳ Loading latest IT trends...
+        ⏳ 최신 IT 기술 뉴스를 불러오는 중입니다...
       </div>
     );
+  }
 
-  // 에러 화면
-  if (error)
+  // 에러
+  if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-red-500">
         ❌ {error}
       </div>
     );
+  }
 
   const { category_ratio, keyword_ranking, weekly_trend } = feed.charts;
 
-  // ========== 프론트엔드 렌더링 ==========
+  // ============================
+  //      렌더링 시작
+  // ============================
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
       <main className="max-w-6xl mx-auto px-8 py-10">
@@ -108,13 +108,17 @@ export default function Home() {
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-10">표시할 뉴스가 없습니다.</p>
+            <p className="text-gray-500 text-center py-10">
+              표시할 뉴스가 없습니다.
+            </p>
           )}
         </section>
 
-        {/* 📊 기술 트렌드 분석 */}
+        {/* 📊 IT 기술 트렌드 분석 */}
         <section className="mt-20">
-          <h2 className="text-2xl font-semibold mb-10">📊 IT 기술 트렌드 분석</h2>
+          <h2 className="text-2xl font-semibold mb-10">
+            📊 IT 기술 트렌드 분석
+          </h2>
 
           {/* 1️⃣ 기술 카테고리 비중 */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-14">
@@ -145,7 +149,9 @@ export default function Home() {
                     <div key={idx} className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                        style={{
+                          backgroundColor: COLORS[idx % COLORS.length],
+                        }}
                       ></div>
                       <span className="text-sm text-gray-700">
                         {item.category} —{" "}
@@ -160,7 +166,7 @@ export default function Home() {
             )}
           </div>
 
-          {/* 2️⃣ 키워드 TOP 20 */}
+          {/* 2️⃣ 핫 키워드 TOP 20 */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-14">
             <h3 className="font-semibold text-lg mb-4">핫 키워드 TOP 20</h3>
 

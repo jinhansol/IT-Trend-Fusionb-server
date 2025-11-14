@@ -1,11 +1,11 @@
-"""🚀 IT Trend Hub v2 메인 엔트리포인트 — 사용자 인증 + DevDashboard 통합 버전"""
+# backend/main.py
+# flake8: noqa
 
 import os
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
-# ⚙️ 내부 모듈 import (항상 최상단 유지)
 from database.models import init_db
 from routers import (
     home_router,
@@ -14,75 +14,70 @@ from routers import (
     news_router,
     trend_router,
     dev_router,
-    auth_router,   # ✅ 새로 추가된 인증 라우터
+    auth_router,
     protected_router,
     interest_router,
 )
+from scheduler import start_scheduler
 
-# ---------------------------------------------------------
-# 1️⃣ 환경 변수 로드 (.env)
-# ---------------------------------------------------------
+# --------------------------------------
+# 🔧 환경 변수 로드
+# --------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 load_dotenv(dotenv_path=ENV_PATH)
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
-NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-
-print(
-    "🔍 ENV LOAD CHECK:",
-    f"OPENAI={bool(OPENAI_API_KEY)}, NAVER={bool(NAVER_CLIENT_ID)}, GITHUB={bool(GITHUB_TOKEN)}",
-)
-
-if not all([OPENAI_API_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET]):
-    print("⚠️ 일부 환경 변수 누락 — .env 파일을 확인하세요.")
-
-# ---------------------------------------------------------
-# 2️⃣ FastAPI 앱 초기화
-# ---------------------------------------------------------
+# --------------------------------------
+# 🚀 FastAPI 초기화
+# --------------------------------------
 app = FastAPI(title="IT Trend Hub v2 🚀")
 
-# ---------------------------------------------------------
-# 3️⃣ CORS 설정 (React 개발 서버 허용)
-# ---------------------------------------------------------
+# CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------
-# 4️⃣ DB 초기화 및 라우터 등록
-# ---------------------------------------------------------
+# --------------------------------------
+# 💾 DB 초기화 + 라우터 등록
+# --------------------------------------
 init_db()
 
-# ✨ 인증 라우터 (회원가입 / 로그인)
-app.include_router(auth_router.router, prefix="/api/auth")
-
-# ✨ 기존 서비스 라우터
 app.include_router(home_router.router)
+app.include_router(news_router.router)
 app.include_router(career_router.router)
-app.include_router(github_router.router, prefix="/api/github")
-app.include_router(news_router.router, prefix="/api/news")
-app.include_router(trend_router.router, prefix="/api/trend")
+app.include_router(github_router.router)
+app.include_router(trend_router.router)
 app.include_router(dev_router.router)
-app.include_router(auth_router.router)
+app.include_router(auth_router.router, prefix="/api/auth")
 app.include_router(protected_router.router)
 app.include_router(interest_router.router)
 
-# ---------------------------------------------------------
-# 5️⃣ 기본 루트 엔드포인트
-# ---------------------------------------------------------
+
+# ==========================================================
+# 🕒 스케줄러 중복 실행 방지 로직
+# ==========================================================
+
+# uvicorn --reload 환경에서는 RUN_MAIN="true"로 설정됨
+RUN_MAIN_FLAG = os.environ.get("RUN_MAIN", "false")
+
+@app.on_event("startup")
+def startup_event():
+    """
+    ⭐ reload 워커에서는 스케줄러가 실행되지 않도록 보호함
+    ⭐ 스케줄러가 이미 실행된 경우 중복 job 등록도 차단됨 (scheduler.py에서 처리)
+    """
+    if RUN_MAIN_FLAG == "true":
+        print("⚠️ Reload 프로세스 → 스케줄러 실행 안 함")
+        return
+
+    print("🟢 Main 프로세스 → 스케줄러 실행")
+    start_scheduler()
+
+
 @app.get("/")
 def root():
-    """서버 정상 작동 확인용"""
-    return {"message": "✅ IT Trend Hub v2 Backend Running with Auth + DevDashboard!"}
+    return {"message": "IT Trend Hub v2 Backend Running 🚀"}
