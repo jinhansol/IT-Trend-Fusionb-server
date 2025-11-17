@@ -1,3 +1,4 @@
+# backend/routers/home_router.py
 # flake8: noqa
 
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -22,13 +23,13 @@ def get_db():
     finally:
         db.close()
 
-# 최근 7일 기준
+# 최근 7일
 def last_7_days():
     return datetime.utcnow() - timedelta(days=7)
 
 
 # ============================================================
-# 🔓 PUBLIC 홈 (전체 IT 뉴스 + 최근 7일 차트)
+# 🔓 PUBLIC 홈
 # ============================================================
 @router.get("/public")
 def public_home(
@@ -36,9 +37,9 @@ def public_home(
     db: Session = Depends(get_db),
 ):
 
-    # 🟡 DB 완전 비어있으면 자동 크롤링
+    # ⭐ DB 0개면 첫 접근에서만 초기 크롤링
     if db.query(NewsFeed).count() == 0:
-        print("🟡 DB 비어있음 → 자동 크롤링 실행")
+        print("🟡 DB 비어있음 → 최초 자동 크롤 실행")
         run_news_pipeline()
 
     seven_days = last_7_days()
@@ -54,7 +55,7 @@ def public_home(
                         or_(
                             NewsFeed.title.ilike(f"%{keyword}%"),
                             NewsFeed.summary.ilike(f"%{keyword}%"),
-                            NewsFeed.keywords.ilike(f"%{keyword}%")
+                            NewsFeed.keywords.ilike(f"%{keyword}%"),
                         )
                     )
                 )
@@ -70,17 +71,16 @@ def public_home(
                 "charts": build_charts(items),
             }
 
-
-        # 📰 기본 모드 — 최신 8개 불러오기
+        # 📰 기본 모드 → 최신 8개 랜덤
         latest_news = (
             db.query(NewsFeed)
             .filter(NewsFeed.created_at >= seven_days)
-            .order_by(func.random())   # ← 랜덤
+            .order_by(func.random())
             .limit(8)
             .all()
         )
 
-        # 📊 차트 데이터 (7일)
+        # 📊 차트 데이터
         chart_items = (
             db.query(NewsFeed)
             .filter(NewsFeed.created_at >= seven_days)

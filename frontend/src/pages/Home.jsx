@@ -1,9 +1,7 @@
-// Home.jsx — PUBLIC 전용 최종 버전
 import React, { useEffect, useState } from "react";
 import { fetchHomeFeed } from "../api/homeAPI";
 import NewsCard from "../components/NewsCard";
 
-// 📊 Recharts
 import {
   PieChart,
   Pie,
@@ -19,16 +17,7 @@ import {
   CartesianGrid,
 } from "recharts";
 
-// 🎨 색상 팔레트
-const COLORS = [
-  "#2563EB",
-  "#0EA5E9",
-  "#38BDF8",
-  "#4ADE80",
-  "#F87171",
-  "#A78BFA",
-  "#FB923C",
-];
+const COLORS = ["#2563EB", "#0EA5E9", "#38BDF8", "#4ADE80", "#F87171", "#A78BFA", "#FB923C"];
 
 export default function Home() {
   const [feed, setFeed] = useState({
@@ -43,15 +32,14 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // 🚀 홈 피드 로드
   useEffect(() => {
     const loadFeed = async () => {
       try {
-        const res = await fetchHomeFeed();
+        const data = await fetchHomeFeed();
 
         setFeed({
-          news: res.news || [],
-          charts: res.charts || {
+          news: data.news || [],
+          charts: data.charts || {
             category_ratio: [],
             keyword_ranking: [],
             weekly_trend: [],
@@ -68,19 +56,17 @@ export default function Home() {
     loadFeed();
   }, []);
 
-  // 로딩
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-gray-400">
+      <div className="flex items-center justify-center min-h-screen text-gray-400">
         ⏳ 최신 IT 기술 뉴스를 불러오는 중입니다...
       </div>
     );
   }
 
-  // 에러
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-red-500">
+      <div className="flex items-center justify-center min-h-screen text-red-500">
         ❌ {error}
       </div>
     );
@@ -88,18 +74,13 @@ export default function Home() {
 
   const { category_ratio, keyword_ranking, weekly_trend } = feed.charts;
 
-  // ============================
-  //      렌더링 시작
-  // ============================
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
       <main className="max-w-6xl mx-auto px-8 py-10">
 
-        {/* 📰 최신 뉴스 */}
+        {/* 뉴스 */}
         <section className="mt-6">
-          <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-            📰 최신 기술 뉴스
-          </h2>
+          <h2 className="text-2xl font-semibold mb-6">📰 최신 기술 뉴스</h2>
 
           {feed.news.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -108,33 +89,23 @@ export default function Home() {
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-10">
-              표시할 뉴스가 없습니다.
-            </p>
+            <p className="text-gray-500 text-center py-10">표시할 뉴스가 없습니다.</p>
           )}
         </section>
 
-        {/* 📊 IT 기술 트렌드 분석 */}
+        {/* 트렌드 */}
         <section className="mt-20">
-          <h2 className="text-2xl font-semibold mb-10">
-            📊 IT 기술 트렌드 분석
-          </h2>
+          <h2 className="text-2xl font-semibold mb-10">📊 IT 기술 트렌드 분석</h2>
 
-          {/* 1️⃣ 기술 카테고리 비중 */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-14">
+          {/* 카테고리 비중 */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-14">
             <h3 className="font-semibold text-lg mb-4">기술 카테고리 비중</h3>
 
             {category_ratio.length > 0 ? (
               <>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
-                    <Pie
-                      data={category_ratio}
-                      dataKey="count"
-                      nameKey="category"
-                      outerRadius={110}
-                      label
-                    >
+                    <Pie data={category_ratio} dataKey="count" nameKey="category" outerRadius={110} label>
                       {category_ratio.map((_, idx) => (
                         <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                       ))}
@@ -143,31 +114,20 @@ export default function Home() {
                   </PieChart>
                 </ResponsiveContainer>
 
-                {/* 카테고리 설명 리스트 */}
                 <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {category_ratio.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{
-                          backgroundColor: COLORS[idx % COLORS.length],
-                        }}
-                      ></div>
-                      <span className="text-sm text-gray-700">
-                        {item.category} —{" "}
-                        <span className="font-semibold">{item.count}</span>건
-                      </span>
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                      <span className="text-sm">{item.category} — <strong>{item.count}</strong>건</span>
                     </div>
                   ))}
                 </div>
               </>
-            ) : (
-              <p className="text-gray-400 text-sm">데이터 없음</p>
-            )}
+            ) : <p className="text-gray-400 text-sm">데이터 없음</p>}
           </div>
 
-          {/* 2️⃣ 핫 키워드 TOP 20 */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-14">
+          {/* 키워드 */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-14">
             <h3 className="font-semibold text-lg mb-4">핫 키워드 TOP 20</h3>
 
             {keyword_ranking.length > 0 ? (
@@ -181,22 +141,19 @@ export default function Home() {
                   </BarChart>
                 </ResponsiveContainer>
 
-                {/* 키워드 리스트 */}
                 <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {keyword_ranking.slice(0, 12).map((item, idx) => (
-                    <div key={idx} className="text-sm text-gray-700">
+                    <div key={idx} className="text-sm">
                       🔹 <strong>{item.keyword}</strong> — {item.count}회
                     </div>
                   ))}
                 </div>
               </>
-            ) : (
-              <p className="text-gray-400 text-sm">데이터 없음</p>
-            )}
+            ) : <p className="text-gray-400 text-sm">데이터 없음</p>}
           </div>
 
-          {/* 3️⃣ 주별 기술 트렌드 변화 */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          {/* 주별 변화 */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
             <h3 className="font-semibold text-lg mb-4">주별 기술 트렌드 변화</h3>
 
             {weekly_trend.length > 0 ? (
@@ -206,18 +163,12 @@ export default function Home() {
                   <YAxis />
                   <Tooltip />
                   <CartesianGrid strokeDasharray="3 3" />
-                  <Line
-                    type="monotone"
-                    dataKey="count"
-                    stroke="#0EA5E9"
-                    strokeWidth={2}
-                  />
+                  <Line type="monotone" dataKey="count" stroke="#0EA5E9" strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
-            ) : (
-              <p className="text-gray-400 text-sm">데이터 없음</p>
-            )}
+            ) : <p className="text-gray-400 text-sm">데이터 없음</p>}
           </div>
+
         </section>
       </main>
     </div>

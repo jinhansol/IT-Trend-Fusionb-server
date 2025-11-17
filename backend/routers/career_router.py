@@ -1,14 +1,16 @@
 # routers/career_router.py
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
 from database.mariadb import SessionLocal
 from database.models import UserProfile, CareerJob
-from core.security import get_current_user
+from core.security import get_current_user  # ✅ NameError 방지
 
+from services.db_service import get_recent_career_jobs
 from services.career_service import (
     get_weekly_tech_trends,
-    get_recommended_jobs,
     get_user_skills,
+    get_recommended_jobs,
 )
 
 router = APIRouter(prefix="/api/career", tags=["Career"])
@@ -22,19 +24,14 @@ def get_db():
         db.close()
 
 
-# ======================
+# =======================================================
 # 🔓 비로그인 Career Dashboard
-# ======================
+# =======================================================
 @router.get("/public")
 def public_dashboard(db: Session = Depends(get_db)):
     try:
         trends = get_weekly_tech_trends(db)
-        jobs = (
-            db.query(CareerJob)
-            .order_by(CareerJob.posted_date.desc())
-            .limit(20)
-            .all()
-        )
+        jobs = get_recent_career_jobs(db)
 
         return {
             "mode": "public",
@@ -42,18 +39,17 @@ def public_dashboard(db: Session = Depends(get_db)):
             "jobs": jobs,
             "user_skills": [],
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ======================
+# =======================================================
 # 🔐 로그인 Career Dashboard
-# ======================
+# =======================================================
 @router.get("/dashboard")
 def personalized_dashboard(
-    db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     try:
         user_skills = get_user_skills(current_user)
@@ -66,6 +62,5 @@ def personalized_dashboard(
             "trends": trends,
             "jobs": jobs,
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

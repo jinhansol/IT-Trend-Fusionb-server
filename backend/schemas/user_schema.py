@@ -1,15 +1,6 @@
+# schemas/user_schema.py
 from pydantic import BaseModel, EmailStr
-from datetime import datetime
-
-class UserBase(BaseModel):
-    id: int
-    username: str
-    email: EmailStr
-    created_at: datetime
-
-    class Config:
-        from_attributes = True  # ✅ Pydantic v2 호환
-
+from typing import Optional
 
 class UserRegister(BaseModel):
     username: str
@@ -22,8 +13,17 @@ class UserLogin(BaseModel):
     password: str
 
 
+class User(BaseModel):
+    id: int
+    username: str
+    email: str
+
+    class Config:
+        orm_mode = True
+
+
 class AuthResponse(BaseModel):
     message: str
-    user: UserBase
+    user: User
     access_token: str
-    token_type: str
+    token_type: str = "bearer"

@@ -1,47 +1,43 @@
+# backend/services/news_service.py
 # flake8: noqa
 """
-🔥 IT 뉴스 통합 크롤링 + AI 요약/카테고리/키워드 + DB 저장 (최종 안정화 버전 — 매체당 3개 제한)
+🔥 FINAL v3 — 20개 RSS 유지 / 매체당 3개 확보 / HTML fallback 강화
+🔥 Skip ZERO / 본문 부족 강제 요약 / URL 오류 완전 해결
+🔥 한국어 자동 요약 안정화 / IT 필터 개선
 """
 
 import os
-import time
 import json
-import requests
+import time
 import feedparser
-from datetime import datetime
-from typing import List, Dict
-from urllib.parse import urlparse, urlunparse
-
-from dotenv import load_dotenv
+import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
+from urllib.parse import urlparse, urljoin
+from dotenv import load_dotenv
 from openai import OpenAI
 
 from database.mariadb import SessionLocal
 from database.models import NewsFeed
 
 load_dotenv()
-
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ----------------------------------------------------------
-# 1. RSS 소스 (국내 + 해외)
-# ----------------------------------------------------------
-
+# -------------------------------
+# 20개 RSS (채은 요구사항 그대로)
+# -------------------------------
 IT_FEEDS = [
-    # 🇰🇷 ZDNet
     "https://www.zdnet.co.kr/Include/news.xml",
     "https://www.zdnet.co.kr/Include/news_ai.xml",
     "https://www.zdnet.co.kr/Include/news_cloud.xml",
     "https://www.zdnet.co.kr/Include/news_security.xml",
 
-    # 🇰🇷 ETNews
     "https://rss.etnews.com/Section903.xml",
     "https://rss.etnews.com/AI.xml",
     "https://rss.etnews.com/Cloud.xml",
     "https://rss.etnews.com/Security.xml",
     "https://rss.etnews.com/Semicon.xml",
 
-    # 🇰🇷 기타
     "https://www.itworld.co.kr/rss/all.xml",
     "https://www.ciokorea.com/rss/all.xml",
     "https://koreaittimes.com/rss/allArticle.xml",
@@ -49,7 +45,6 @@ IT_FEEDS = [
     "https://www.bloter.net/rss",
     "https://www.boannews.com/media/rss.xml",
 
-    # 🇺🇸 해외 IT 전문
     "https://techcrunch.com/feed/",
     "https://www.wired.com/feed/category/business/latest/rss",
     "https://www.theverge.com/rss/index.xml",
@@ -59,211 +54,273 @@ IT_FEEDS = [
     "http://rss.slashdot.org/Slashdot/slashdotMain",
 ]
 
+# -------------------------------
+# 도메인 매핑
+# -------------------------------
+FALLBACK_MAP = {
+    "zdnet.co.kr": "https://www.zdnet.co.kr/news/",
+    "etnews.com": "https://www.etnews.com/news/",
+    "itworld.co.kr": "https://www.itworld.co.kr/",
+    "ciokorea.com": "https://www.ciokorea.com/",
+    "koreaittimes.com": "https://koreaittimes.com/",
+    "ddaily.co.kr": "https://www.ddaily.co.kr/news/",
+    "bloter.net": "https://www.bloter.net/news",
+    "boannews.com": "https://www.boannews.com/media/t_list.asp",
 
-# ----------------------------------------------------------
-# URL 정규화 (쿼리/해시 제거)
-# ----------------------------------------------------------
-def normalize_url(url: str) -> str:
+    "techcrunch.com": "https://techcrunch.com/",
+    "wired.com": "https://www.wired.com/business/",
+    "theverge.com": "https://www.theverge.com/tech",
+    "arstechnica.com": "https://arstechnica.com/",
+    "venturebeat.com": "https://venturebeat.com/category/ai/",
+    "infoq.com": "https://www.infoq.com/",
+    "slashdot.org": "https://slashdot.org/",
+}
+
+# -------------------------------
+# RSS 파싱
+# -------------------------------
+def fetch_rss(feed_url):
+    parsed = feedparser.parse(feed_url)
+    items = []
+
+    for e in parsed.entries:
+        title = e.get("title", "").strip()
+        link = e.get("link", "").strip()
+
+        if not title or not link:
+            continue
+
+        items.append({
+            "title": title,
+            "url": link,
+            "published": e.get("published", ""),
+            "source": feed_url
+        })
+
+    return items
+
+# -------------------------------
+# HTML fallback
+# -------------------------------
+def fetch_html_items(feed_url):
+    domain = urlparse(feed_url).netloc.replace("www.", "")
+
+    base_url = None
+    for key in FALLBACK_MAP:
+        if key in domain:
+            base_url = FALLBACK_MAP[key]
+            break
+
+    if not base_url:
+        return []
+
     try:
-        p = urlparse(url)
-        return urlunparse(p._replace(query="", fragment=""))
-    except:
-        return url
+        res = requests.get(base_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
+        soup = BeautifulSoup(res.text, "html.parser")
 
+        items = []
+        for a in soup.find_all("a", href=True)[:30]:
+            title = a.get_text(strip=True)
+            link = a["href"]
 
-# ----------------------------------------------------------
-# RSS → 매체별 기사 그룹화
-# ----------------------------------------------------------
-def fetch_grouped_rss() -> Dict[str, List[Dict]]:
-    grouped = {}
-
-    for feed_url in IT_FEEDS:
-        parsed = feedparser.parse(feed_url)
-        source = urlparse(feed_url).netloc
-
-        if source not in grouped:
-            grouped[source] = []
-
-        for entry in parsed.entries:
-            url = entry.get("link", "").strip()
-            title = entry.get("title", "").strip()
-            if not url or not title:
+            if len(title) < 6:
                 continue
 
-            grouped[source].append({
+            full = link if link.startswith("http") else urljoin(base_url, link)
+
+            items.append({
                 "title": title,
-                "url": normalize_url(url),
-                "summary": entry.get("summary", "").strip(),
-                "published": entry.get("published", ""),
-                "source": source,
+                "url": full,
+                "published": "",
+                "source": base_url,
             })
 
-    return grouped
+        return items
 
+    except:
+        return []
 
-# ----------------------------------------------------------
-# 매체당 최신 N개만 선택
-# ----------------------------------------------------------
-MAX_PER_SOURCE = 3
-
-def get_limited_items() -> List[Dict]:
-    grouped = fetch_grouped_rss()
-    limited = []
-
-    for source, items in grouped.items():
-        # published 기준으로 최신순 정렬
-        sorted_items = sorted(
-            items,
-            key=lambda x: x["published"] or "",
-            reverse=True
-        )
-
-        limited.extend(sorted_items[:MAX_PER_SOURCE])
-
-    return limited
-
-
-# ----------------------------------------------------------
+# -------------------------------
 # 본문 크롤링
-# ----------------------------------------------------------
-def clean_text(text: str) -> str:
-    return "\n".join([t.strip() for t in text.split("\n") if t.strip()])
+# -------------------------------
+ARTICLE_SELECTORS = [
+    "article", "main", "#articleBody", "#articleBodyContents",
+    ".article_body", ".art_txt", ".post-content", "section.article"
+]
 
-
-def fetch_article_content(url: str) -> str:
+def fetch_content(url):
     try:
-        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
+        res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=12)
+        soup = BeautifulSoup(res.text, "html.parser")
 
-        selectors = [
-            "article", "#articleBody", "#articleBodyContents",
-            ".article_body", ".art_txt", "section.article"
-        ]
-
-        for sel in selectors:
-            node = soup.select_one(sel)
-            if node:
-                return clean_text(node.get_text(separator="\n"))
-
-        return clean_text(soup.get_text(separator="\n"))
-
-    except Exception as e:
-        print(f"[ERROR] fetch_article_content: {e}")
+        for sel in ARTICLE_SELECTORS:
+            t = soup.select_one(sel)
+            if t:
+                txt = t.get_text(separator="\n").strip()
+                if len(txt) > 80:
+                    return txt
+        return soup.get_text(separator="\n").strip()
+    except:
         return ""
 
+# -------------------------------
+# IT 필터
+# -------------------------------
+IT_KEYWORDS = [
+    "ai", "gpt", "llm", "openai", "cloud", "security",
+    "server", "backend", "frontend", "devops",
+    "gpu", "cpu", "robot", "tech", "semiconductor",
+    "데이터", "보안", "반도체", "개발자"
+]
 
-# ----------------------------------------------------------
+def is_it_related(title, content):
+    text = (title + " " + content).lower()
+    # 제목 기반 우선 필터(더 강하게 적용)
+    for kw in IT_KEYWORDS:
+        if kw.lower() in title.lower():
+            return True
+
+    # 본문 기반 보조 필터
+    for kw in IT_KEYWORDS:
+        if kw.lower() in text:
+            return True
+
+    return False
+
+# -------------------------------
 # AI 요약
-# ----------------------------------------------------------
-def analyze_article(title: str, content: str):
+# -------------------------------
+def analyze_article(title, content):
+    if len(content) < 50:
+        content = f"[본문 부족] 제목만 기반으로 IT 요약 생성: {title}"
+
     prompt = f"""
-    아래는 IT 관련 뉴스 기사입니다.
+당신은 IT 뉴스 전문 요약 시스템입니다.
 
-    제목:
-    {title}
+[제목]
+{title}
 
-    본문(요약용):
-    {content[:4000]}
+[본문]
+{content[:2500]}
 
-    아래 JSON 형식으로만 반환하세요:
+다음 JSON 형식으로 출력하세요:
+{{
+  "summary": "한국어 3~4문장 요약",
+  "category": "ai|cloud|security|backend|frontend|data|robotics|etc",
+  "keywords": ["키워드1", "키워드2", "키워드3"]
+}}
+"""
 
-    {{
-      "summary": "...",
-      "category": "AI/보안/모바일/클라우드/정책/스타트업/기타 중 하나",
-      "keywords": ["...", "...", "..."]
-    }}
-    """
+    # ------ 1st Try ------
     try:
-        res = client.chat.completions.create(
+        res = client.responses.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
+            input=prompt
         )
-
-        raw = res.choices[0].message.content
-        cleaned = raw.replace("```json", "").replace("```", "").strip()
-        return json.loads(cleaned)
-
-    except:
-        return {"summary": "", "category": "기타", "keywords": ["IT"]}
-
-
-# ----------------------------------------------------------
-# 날짜 파싱
-# ----------------------------------------------------------
-def parse_published_date(raw: str):
-    try:
-        parsed = feedparser._parse_date(raw)
-        if parsed:
-            return datetime(*parsed[:6])
+        raw = res.output_text.strip().replace("```json", "").replace("```", "")
+        return json.loads(raw)
     except:
         pass
-    return datetime.utcnow()
 
+    # ------ Retry ------
+    try:
+        res = client.responses.create(
+            model="gpt-4o-mini",
+            input=prompt + "\nJSON만 출력하세요."
+        )
+        raw = res.output_text.strip().replace("```json", "").replace("```", "")
+        return json.loads(raw)
+    except:
+        return {"summary": title, "category": "etc", "keywords": ["IT"]}
 
-# ----------------------------------------------------------
-# DB 중복 체크
-# ----------------------------------------------------------
-def exists_in_db(url, title):
+# -------------------------------
+# DB
+# -------------------------------
+def exists(url, title):
     db = SessionLocal()
-    exists = (
+    row = (
         db.query(NewsFeed)
         .filter((NewsFeed.url == url) | (NewsFeed.title == title))
         .first()
     )
     db.close()
-    return exists
+    return row
 
-
-# ----------------------------------------------------------
-# DB 저장
-# ----------------------------------------------------------
-def save_news(item, ai, content):
+def save(item, ai, content):
     db = SessionLocal()
     try:
         news = NewsFeed(
             title=item["title"],
-            summary=ai.get("summary", ""),
+            summary=ai["summary"],
             content=content,
-            category=ai.get("category", "기타"),
-            keywords=json.dumps(ai.get("keywords", ["IT"]), ensure_ascii=False),
-            source=item["source"],
+            category=ai["category"],
+            keywords=json.dumps(ai["keywords"], ensure_ascii=False),
             url=item["url"],
-            published_at=parse_published_date(item["published"]),
+            source=urlparse(item["url"]).netloc,   # RSS 주소가 아니라 기사 도메인만
+            published_at=datetime.utcnow(),
             created_at=datetime.utcnow(),
         )
         db.add(news)
         db.commit()
-        print(" - 저장 완료")
-
     except Exception as e:
-        print(f"[ERROR] DB 저장 실패: {e}")
+        print("❌ DB 저장 실패:", e)
         db.rollback()
-
     finally:
         db.close()
 
-
-# ----------------------------------------------------------
-# 메인 파이프라인
-# ----------------------------------------------------------
+# -------------------------------
+# PIPELINE
+# -------------------------------
 def run_news_pipeline():
-    limited_items = get_limited_items()
-    print(f"[INFO] 매체당 3개 제한 → 총 {len(limited_items)}개 기사 처리")
+    print("\n🔥 NEWS PIPELINE START")
 
-    for idx, item in enumerate(limited_items, start=1):
-        print(f"\n[{idx}/{len(limited_items)}] {item['title']}")
+    all_items = []
 
-        if exists_in_db(item["url"], item["title"]):
-            print(" - DB 중복 → Skip")
+    # 각 RSS에서 3개 확보
+    for feed in IT_FEEDS:
+        rss = fetch_rss(feed)
+
+        if len(rss) < 3:
+            html = fetch_html_items(feed)
+            rss.extend(html)
+
+        all_items.extend(rss[:3])
+
+    print(f"📌 1차 확보: {len(all_items)}")
+
+    # 부족하면 보충(최소 60개)
+    if len(all_items) < 60:
+        need = 60 - len(all_items)
+        print(f"⚠️ 부족 {need}개 → fallback 추가 확보 시작")
+
+        for feed in IT_FEEDS:
+            extra = fetch_html_items(feed)
+            for ex in extra:
+                if need <= 0:
+                    break
+                all_items.append(ex)
+                need -= 1
+            if need <= 0:
+                break
+
+    print(f"✅ 최종 확보: {len(all_items)}개\n")
+
+    # 분석 + 저장
+    for idx, item in enumerate(all_items, start=1):
+        print(f"[{idx}/{len(all_items)}] {item['title']}")
+
+        if exists(item["url"], item["title"]):
+            print(" - Skip(중복)")
             continue
 
-        content = fetch_article_content(item["url"])
-        if len(content) < 150:
-            print(" - 본문 부족 → Skip")
+        content = fetch_content(item["url"])
+
+        if not is_it_related(item["title"], content):
+            print(" - Skip(비IT)")
             continue
 
         ai = analyze_article(item["title"], content)
-        save_news(item, ai, content)
+        save(item, ai, content)
 
-        time.sleep(0.8)
+        time.sleep(0.3)
+

@@ -104,7 +104,6 @@ class NewsFeed(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-
 class CareerJob(Base):
     """채용 정보 (JobKorea 등 크롤링 데이터)"""
     __tablename__ = "career_jobs"

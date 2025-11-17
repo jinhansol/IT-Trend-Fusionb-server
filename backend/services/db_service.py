@@ -1,158 +1,118 @@
+# services/db_service.py
 from sqlalchemy.orm import Session
 from sqlalchemy import exists
-from database.models import HomeNews, JobPost, DevTrend
 from datetime import datetime
 
-# ========================================================
-# 🏠 HOME NEWS
-# ========================================================
-def get_home_news(db: Session, limit: int = 5):
-    """홈 뉴스 최신순 조회"""
-    try:
-        return (
-            db.query(HomeNews)
-            .order_by(HomeNews.published_at.desc())
-            .limit(limit)
-            .all()
-        )
-    except Exception as e:
-        print(f"[DB] HomeNews 조회 오류: {e}")
-        return []
+from database.models import NewsFeed, CareerJob
 
 
-def save_home_news(db: Session, news_list: list):
+# =======================================================
+# 📰 NEWS FEED 저장 및 조회
+# =======================================================
+def save_news_feed(db: Session, news_list: list):
     """크롤링된 뉴스 저장 (중복 방지)"""
     try:
         added_count = 0
+
         for n in news_list:
             title = n.get("title")
             if not title:
                 continue
 
-            exists_query = db.query(exists().where(HomeNews.title == title)).scalar()
-            if exists_query:
-                continue  # 이미 존재 → skip
+            exists_query = db.query(
+                exists().where(NewsFeed.title == title)
+            ).scalar()
 
-            db_news = HomeNews(
+            if exists_query:
+                continue
+
+            db_news = NewsFeed(
                 title=title,
                 summary=n.get("summary"),
-                link=n.get("link"),
-                published_at=n.get("published_at", datetime.utcnow()),
+                content=n.get("content"),
+                category=n.get("category"),
+                keywords=n.get("keywords"),
+                source=n.get("source"),
+                url=n.get("url"),
+                published_at=n.get("published_at"),
+                created_at=datetime.utcnow(),
             )
             db.add(db_news)
             added_count += 1
 
         db.commit()
-        print(f"[DB] HomeNews {added_count}개 저장 완료 ✅")
+        print(f"[DB] NewsFeed {added_count}개 저장 완료")
     except Exception as e:
         db.rollback()
-        print(f"[DB] HomeNews 저장 실패 ❌ {e}")
+        print(f"[DB] News 저장 실패: {e}")
 
 
-# ========================================================
-# 💼 JOB POSTS
-# ========================================================
-def get_job_posts(db: Session, limit: int = 10):
-    """최근 잡 공고 조회"""
+def get_latest_news(db: Session, limit: int = 8):
+    """홈 화면 최신 뉴스"""
     try:
         return (
-            db.query(JobPost)
-            .order_by(JobPost.created_at.desc())
+            db.query(NewsFeed)
+            .order_by(NewsFeed.published_at.desc())
             .limit(limit)
             .all()
         )
     except Exception as e:
-        print(f"[DB] JobPost 조회 오류: {e}")
+        print(f"[DB] 뉴스 조회 오류: {e}")
         return []
 
 
-def save_job_posts(db: Session, jobs: list):
-    """크롤링된 잡 데이터 저장 (중복 방지)"""
+# =======================================================
+# 💼 CAREER JOBS 저장 및 조회
+# =======================================================
+def save_career_jobs(db: Session, jobs: list):
+    """CareerJob 저장 (잡코리아 + 사람인)"""
     try:
-        added_count = 0
+        added = 0
+
         for j in jobs:
             title = j.get("title")
             company = j.get("company")
+
             if not title or not company:
                 continue
 
-            # 제목 + 회사로 중복 판단
-            exists_query = (
-                db.query(exists().where(JobPost.title == title, JobPost.company == company))
-                .scalar()
-            )
+            exists_query = db.query(
+                exists().where(
+                    CareerJob.title == title,
+                    CareerJob.company == company
+                )
+            ).scalar()
+
             if exists_query:
                 continue
 
-            db_job = JobPost(
+            db_job = CareerJob(
                 title=title,
                 company=company,
-                location=j.get("location"),
-                skills=j.get("skills"),
-                salary=j.get("salary"),
-                link=j.get("link"),
-                created_at=datetime.utcnow(),
+                location=j.get("location") or j.get("info"),
+                job_type="정규직",
+                link=j.get("url"),
+                posted_date=datetime.utcnow(),
             )
             db.add(db_job)
-            added_count += 1
+            added += 1
 
         db.commit()
-        print(f"[DB] JobPost {added_count}개 저장 완료 ✅")
+        print(f"[DB] CareerJob {added}개 저장 완료")
     except Exception as e:
         db.rollback()
-        print(f"[DB] JobPost 저장 실패 ❌ {e}")
+        print(f"[DB] CareerJob 저장 실패: {e}")
 
 
-# ========================================================
-# 💻 DEV TRENDS
-# ========================================================
-def get_dev_trends(db: Session, limit: int = 10):
-    """개발 언어 트렌드 조회"""
+def get_recent_career_jobs(db: Session, limit: int = 20):
+    """최근 채용 정보"""
     try:
         return (
-            db.query(DevTrend)
-            .order_by(DevTrend.updated_at.desc())
+            db.query(CareerJob)
+            .order_by(CareerJob.posted_date.desc())
             .limit(limit)
             .all()
         )
     except Exception as e:
-        print(f"[DB] DevTrend 조회 오류: {e}")
+        print(f"[DB] CareerJob 조회 오류: {e}")
         return []
-
-
-def save_dev_trends(db: Session, trends: list):
-    """언어별 트렌드 데이터 저장 (중복 방지 + 업데이트 지원)"""
-    try:
-        updated_count, inserted_count = 0, 0
-
-        for t in trends:
-            lang = t.get("language")
-            if not lang:
-                continue
-
-            existing = db.query(DevTrend).filter(DevTrend.language == lang).first()
-            if existing:
-                # 업데이트 (usage, growth, stars만 덮어쓰기)
-                existing.usage = t.get("usage", existing.usage)
-                existing.growth = t.get("growth", existing.growth)
-                existing.stars = t.get("stars", existing.stars)
-                existing.updated_at = datetime.utcnow()
-                updated_count += 1
-            else:
-                db_trend = DevTrend(
-                    language=lang,
-                    usage=t.get("usage"),
-                    growth=t.get("growth"),
-                    stars=t.get("stars"),
-                    updated_at=datetime.utcnow(),
-                )
-                db.add(db_trend)
-                inserted_count += 1
-
-        db.commit()
-        print(
-            f"[DB] DevTrend {inserted_count}개 추가, {updated_count}개 업데이트 완료 ✅"
-        )
-    except Exception as e:
-        db.rollback()
-        print(f"[DB] DevTrend 저장 실패 ❌ {e}")

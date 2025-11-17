@@ -3,13 +3,9 @@ import React from "react";
 export default function NewsCard({ item }) {
   if (!item) return null;
 
-  // 도메인 기반 색상 (옵션)
-  const domain = item.source?.toLowerCase() || "";
-
-  const sourceColor =
-    domain.includes("zdnet") ? "text-red-600" :
-    domain.includes("etnews") ? "text-blue-600" :
-    "text-gray-500";
+  const domain = item.url
+    ? new URL(item.url).hostname.replace("www.", "")
+    : "";
 
   return (
     <a
@@ -29,9 +25,8 @@ export default function NewsCard({ item }) {
       )}
 
       <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
-        <span className={`text-xs font-medium ${sourceColor}`}>
-          {item.source}
-        </span>
+        <span className="text-xs text-gray-500 font-medium">{domain}</span>
+
         <span className="text-xs text-indigo-600 font-semibold hover:underline">
           자세히 보기 →
         </span>
