@@ -18,7 +18,6 @@ export async function fetchCareerDashboard(endpoint = "/public") {
     const data = await res.json();
     console.log("📡 [fetchCareerDashboard] 응답:", data);
 
-    // 🔥 서버에서 내려오는 key 그대로 사용해야 함
     return {
       mode: data.mode || "public",
       jobs: data.jobs || [],
@@ -33,5 +32,35 @@ export async function fetchCareerDashboard(endpoint = "/public") {
       trends: [],
       user_skills: [],
     };
+  }
+}
+
+// ⭐ 신규: AI 학습 추천 API
+export async function fetchLearningRecommend() {
+  try {
+    const res = await fetch(`${BASE_URL}/learning`);
+    if (!res.ok) throw new Error("API Error");
+
+    const data = await res.json();
+    return data.learning || [];
+  } catch (e) {
+    console.error("❌ fetchLearningRecommend 오류:", e);
+    return [];
+  }
+}
+
+// ⭐ 신규: 페이징된 채용 공고 API
+export async function fetchPagedJobs(page = 1, size = 6) {
+  try {
+    const res = await fetch(
+      `${BASE_URL}/jobs?page=${page}&size=${size}`
+    );
+
+    if (!res.ok) throw new Error("API Error");
+
+    return await res.json();
+  } catch (e) {
+    console.error("❌ fetchPagedJobs 오류:", e);
+    return { page: 1, size, total: 0, total_pages: 1, jobs: [] };
   }
 }

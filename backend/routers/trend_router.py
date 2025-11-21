@@ -1,39 +1,26 @@
+# backend/routers/trend_router.py
 # flake8: noqa
 """
-📈 Trend Router — 유저 관심사 기반 트렌드 추천 & 요약
+📈 Trend Router — 홈 전용 API
 """
-from fastapi import APIRouter, HTTPException
-from services.trend_service import get_trend_recommendations, get_ai_summary
+
+from fastapi import APIRouter, Depends, HTTPException
+from core.security import get_current_user
+from services.trend_service import get_trend_recommendations
 
 router = APIRouter(prefix="/api/trend", tags=["Trend"])
 
 
 # ---------------------------------------------------------
-# 🔍 관심사 기반 트렌드 추천 (로그인 사용자별)
+# 🔍 관심사 기반 트렌드 추천 (로그인 기반)
 # ---------------------------------------------------------
-@router.get("/recommendations/{user_id}")
-async def fetch_trend_recommendations(user_id: int):
+@router.get("/recommend")
+async def trend_recommend(current_user=Depends(get_current_user)):
     """
-    특정 유저의 관심사 기반 트렌드 요약 추천
+    사용자가 선택한 관심 분야 기반 News → AI 요약 반환
     """
     try:
-        result = await get_trend_recommendations(user_id)
-        if "message" in result and result["message"].startswith("❌"):
-            raise HTTPException(status_code=404, detail=result["message"])
-        return result
+        return await get_trend_recommendations(current_user.id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"서버 오류: {e}")
 
-
-# ---------------------------------------------------------
-# 🧠 최신 트렌드 요약 인사이트 (홈 대시보드용)
-# ---------------------------------------------------------
-@router.get("/insight")
-def fetch_ai_insight():
-    """
-    최근 저장된 트렌드 요약 5개 반환
-    """
-    try:
-        return get_ai_summary()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"서버 오류: {e}")

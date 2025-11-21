@@ -6,20 +6,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+# DB 초기화
 from database.models import init_db
+
+# 🔥 Routers
 from routers import (
     home_router,
     career_router,
-    github_router,
     news_router,
-    trend_router,
-    dev_router,
+    dev_router,            # GitHub + Velog 통합 DevDashboard v3
+    trend_router,          # ⭐ Home AI Insight / Trend 요약
     auth_router,
     protected_router,
     interest_router,
 )
+
+# 스케줄러 & 뉴스 파이프라인
 from scheduler import start_scheduler
-from services.news_service import run_news_pipeline   # ⭐ 추가됨
+from services.news_service import run_news_pipeline
 
 
 # ---------------------------------------------------------
@@ -28,50 +32,60 @@ from services.news_service import run_news_pipeline   # ⭐ 추가됨
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 load_dotenv(dotenv_path=ENV_PATH)
+print("🔍 DEBUG GITHUB_TOKEN:", os.getenv("GITHUB_TOKEN"))
+
 
 # ---------------------------------------------------------
 # 🚀 FastAPI 초기화
 # ---------------------------------------------------------
-app = FastAPI(title="IT Trend Hub v2 🚀")
+app = FastAPI(title="IT Trend Hub v3 🚀")
+
 
 # ---------------------------------------------------------
 # 🌐 CORS 설정
 # ---------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # 필요하면 도메인 지정 가능
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
 
 # ---------------------------------------------------------
 # 💾 DB 초기화 + Router 등록
 # ---------------------------------------------------------
 init_db()
 
+# ⬇️ Public 영역
+# Public
 app.include_router(home_router.router)
 app.include_router(news_router.router)
 app.include_router(career_router.router)
-app.include_router(github_router.router)
-app.include_router(trend_router.router)
 app.include_router(dev_router.router)
+app.include_router(trend_router.router)
+
+# Auth 전용 API
 app.include_router(auth_router.router, prefix="/api/auth")
+
+# Protected / Interest → prefix 설정된 후에 등록
 app.include_router(protected_router.router)
 app.include_router(interest_router.router)
 
 
-# =========================================================
-# 🕒 스케줄러 중복 실행 방지 (uvicorn reload 대응)
-# =========================================================
+
+# ---------------------------------------------------------
+# 🕒 스케줄러 (뉴스 파이프라인 전용)
+# ---------------------------------------------------------
 RUN_MAIN_FLAG = os.environ.get("RUN_MAIN", "false")
 
 
-# ---------------------------------------------------------
-# 🚀 서버 기동 시 스케줄러 시작
-# ---------------------------------------------------------
 @app.on_event("startup")
 def startup_event():
+    """
+    uvicorn --reload 실행 시 두 번 실행되는 문제 회피용
+    """
     if RUN_MAIN_FLAG == "true":
         print("⚠️ Reload 프로세스 → 스케줄러 실행 안 함")
         return
@@ -81,21 +95,17 @@ def startup_event():
 
 
 # ---------------------------------------------------------
-# 🧪 루트 엔드포인트
+# 🧪 Root 엔드포인트
 # ---------------------------------------------------------
 @app.get("/")
 def root():
-    return {"message": "IT Trend Hub v2 Backend Running 🚀"}
+    return {"message": "IT Trend Hub v3 Backend Running 🚀"}
 
 
 # ---------------------------------------------------------
-# ⭐⭐ NEW: 크론 직접 호출용 엔드포인트 ⭐⭐
+# ⭐ cron 직접 호출용 엔드포인트 (뉴스 파이프라인)
 # ---------------------------------------------------------
 @app.get("/cron/news")
 def cron_news():
-    """
-    외부에서 직접 크롤러를 실행할 수 있는 엔드포인트.
-    스케줄러가 내부적으로도 이걸 호출함.
-    """
     run_news_pipeline()
     return {"message": "News Pipeline executed successfully"}

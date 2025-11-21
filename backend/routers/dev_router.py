@@ -1,12 +1,21 @@
-# routers/dev_router.py
-from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from database.mariadb import SessionLocal
-from database.models import UserProfile, TechTrend
-from core.security import get_current_user
+# backend/routers/dev_router.py
+# flake8: noqa
 
-router = APIRouter(prefix="/api/dev", tags=["Dev Dashboard"])
+from fastapi import APIRouter, Depends
+from core.security import get_current_user
+from sqlalchemy.orm import Session
+
+from database.mariadb import SessionLocal
+from database.models import UserProfile
+
+from services.dev_service import (
+    fetch_github_trending,
+    fetch_velog_popular_tags,
+    fetch_velog_trending_posts,
+    fetch_github_repo_updates,
+)
+
+router = APIRouter(prefix="/api/dev", tags=["DevDashboard"])
 
 
 def get_db():
@@ -17,62 +26,47 @@ def get_db():
         db.close()
 
 
-# ============================
-# 🔓 Public Dev Trends
-# ============================
+# ===========================================================
+# PUBLIC
+# ===========================================================
 @router.get("/public")
-def public_dev_trends(
-    keyword: str = Query(None),
-    db: Session = Depends(get_db)
-):
-    try:
-        query = db.query(TechTrend)
+def public_dev_feed(lang: str = "", since: str = "daily"):
+    github = fetch_github_trending(language=lang, since=since)
+    velog_trending = fetch_velog_trending_posts()
+    velog_tags = fetch_velog_popular_tags()
 
-        if keyword:
-            query = query.filter(TechTrend.keyword.ilike(f"%{keyword}%"))
-
-        results = (
-            query.order_by(TechTrend.fetched_at.desc())
-            .limit(20)
-            .all()
-        )
-        return {"mode": "public", "results": results}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Dev public 오류: {e}")
+    return {
+        "mode": "public",
+        "github_trending": github,
+        "velog_trending": velog_trending,
+        "velog_tags": velog_tags,
+    }
 
 
-# ============================
-# 🔐 Personalized Dev Trends
-# ============================
-@router.get("/trend")
-def personalized_dev(
-    keyword: str = Query(None),
+# ===========================================================
+# PERSONAL
+# ===========================================================
+@router.get("/personal")
+def personal_dev_feed(
     current_user: UserProfile = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    try:
-        if keyword:
-            results = (
-                db.query(TechTrend)
-                .filter(TechTrend.keyword.ilike(f"%{keyword}%"))
-                .order_by(TechTrend.fetched_at.desc())
-                .limit(20)
-                .all()
-            )
-            return {"mode": "personalized-search", "results": results}
 
-        stack = current_user.tech_stack or ["Python", "React"]
+    if not current_user.tech_stack:
+        return {"mode": "public"}
 
-        results = (
-            db.query(TechTrend)
-            .filter(or_(*[TechTrend.keyword.ilike(f"%{s}%") for s in stack]))
-            .order_by(TechTrend.fetched_at.desc())
-            .limit(20)
-            .all()
-        )
+    tech_list = current_user.tech_stack
+    github_updates = []
 
-        return {"mode": "personalized", "stack": stack, "results": results}
+    for tech in tech_list:
+        repo = f"{tech}/{tech}"
+        info = fetch_github_repo_updates(repo)
+        if info:
+            github_updates.append(info)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Dev personalized 오류: {e}")
+    return {
+        "mode": "personal",
+        "tech_stack": tech_list,
+        "github_updates": github_updates,
+        "velog_recommended": [],
+    }
