@@ -1,69 +1,71 @@
 // src/pages/DevDashboard.jsx
 import React, { useEffect, useState } from "react";
-import { fetchPublicDev, fetchPersonalDev } from "../api/devAPI";
+import { fetchDevFeed } from "../api/devAPI";
+
+/* 재사용 Card */
+const Card = ({ title, children }) => (
+  <div className="bg-white p-6 rounded-2xl shadow w-full">
+    <h2 className="text-lg font-semibold mb-4 text-gray-800">{title}</h2>
+    {children}
+  </div>
+);
+
+/* Velog Item */
+const VelogItem = ({ post }) => (
+  <li className="border-b pb-3 last:border-none">
+    <a
+      href={post.url}
+      target="_blank"
+      rel="noreferrer"
+      className="text-emerald-600 font-semibold"
+    >
+      {post.title}
+    </a>
+    <p className="text-gray-500 text-sm mt-1">{post.summary}</p>
+  </li>
+);
+
+/* GitHub Repo Item */
+const RepoItem = ({ repo }) => (
+  <li className="border-b pb-4 last:border-none">
+    <div className="flex justify-between items-center">
+      <a
+        href={repo.url}
+        target="_blank"
+        rel="noreferrer"
+        className="font-semibold text-blue-600 hover:underline"
+      >
+        {repo.full_name}
+      </a>
+      <span className="text-yellow-500 font-medium">⭐ {repo.stars}</span>
+    </div>
+
+    {repo.description && (
+      <p className="text-gray-700 text-sm mt-2 leading-snug">{repo.description}</p>
+    )}
+  </li>
+);
 
 export default function DevDashboard() {
-  const [mode, setMode] = useState("public");
   const [loading, setLoading] = useState(true);
-
-  const [publicData, setPublicData] = useState({
-    github_trending: [],
+  const [data, setData] = useState({
+    mode: "public",
     velog_trending: [],
     velog_tags: [],
-  });
-
-  const [personalData, setPersonalData] = useState({
-    tech_stack: [],
-    github_updates: [],
+    github_trending: [],
     velog_recommended: [],
+    velog_interest_match: [],
+    github_recommended: [],
   });
 
-  const token = localStorage.getItem("token");
-  const isLoggedIn = !!token;
-
-  // ================================
-  // PUBLIC DATA
-  // ================================
-  const loadPublic = async () => {
-    try {
-      const res = await fetchPublicDev();
-      setPublicData(res || {});
-    } catch (e) {
-      console.error("❌ Public Load Error:", e);
-    }
-  };
-
-  // ================================
-  // PERSONAL DATA
-  // ================================
-  const loadPersonal = async () => {
-    try {
-      const res = await fetchPersonalDev();
-      if (res?.mode === "personal") {
-        setMode("personal");
-        setPersonalData(res);
-      } else {
-        setMode("public");
-      }
-    } catch (e) {
-      console.error("❌ Personal Load Error:", e);
-      setMode("public");
-    }
-  };
-
-  // ================================
-  // INIT
-  // ================================
   useEffect(() => {
-    setLoading(true);
-
-    const loadAll = async () => {
-      await loadPublic();
-      if (isLoggedIn) await loadPersonal();
+    async function loadFeed() {
+      setLoading(true);
+      const feed = await fetchDevFeed();
+      setData(feed);
       setLoading(false);
-    };
-
-    loadAll();
+    }
+    loadFeed();
   }, []);
 
   if (loading)
@@ -73,184 +75,106 @@ export default function DevDashboard() {
       </div>
     );
 
-  const isPublic = mode === "public";
+  const isPublic = data.mode === "public";
 
-  // ================================
-  // REUSABLE CARD
-  // ================================
-  const Card = ({ title, children }) => (
-    <div className="bg-white p-6 rounded-2xl shadow">
-      <h2 className="text-lg font-semibold mb-4 text-gray-800">{title}</h2>
-      {children}
-    </div>
-  );
-
-  // ================================
-  // RIGHT SIDEBAR
-  // ================================
-  const RightSidebar = () => {
-    if (isPublic) {
-      return (
-        <Card title="🔥 Popular Velog Tags">
-          <ul className="space-y-2">
-            {(publicData.velog_tags || []).map((tag, i) => (
-              <li
-                key={i}
-                className="flex justify-between border-b pb-2 last:border-0 text-sm"
-              >
-                <span>#{tag.tag}</span>
-                <span className="text-gray-400">{tag.count}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      );
-    }
-
-    return (
-      <Card title="📌 Tech Stack Summary">
-        {(personalData.tech_stack || []).length === 0 ? (
-          <p className="text-gray-500 text-sm">관심 기술을 설정해주세요.</p>
-        ) : (
-          <ul className="space-y-3">
-            {personalData.tech_stack.map((tech, i) => (
-              <li
-                key={i}
-                className="border-b pb-3 last:border-0 text-sm text-gray-700"
-              >
-                <strong className="text-emerald-600">{tech}</strong> 기반으로
-                최신 업데이트를 모아 제공하고 있어요.
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    );
-  };
-
-  // ================================
-  // PUBLIC VIEW
-  // ================================
-  const PublicView = () => (
-    <>
-      {/* GitHub Trending */}
-      <Card title="🔥 GitHub Trending">
-        <ul className="space-y-4">
-          {(publicData.github_trending || []).map((repo, i) => (
-            <li key={i} className="border-b pb-4 last:border-none">
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-gray-900">
-                  {repo.full_name}
-                </span>
-                <span className="text-yellow-500 font-medium">
-                  ⭐ {repo.stars}
-                </span>
-              </div>
-
-              {/* 기본 1줄 요약 */}
-              {repo.summary_kor && (
-                <p className="text-gray-800 text-sm bg-gray-100 p-2 rounded mt-2 leading-snug">
-                  🇰🇷 {repo.summary_kor}
-                </p>
-              )}
-
-              {/* README 기반 핵심 요약 */}
-              {repo.summary_detail && repo.summary_detail.trim() !== "" && (
-                <p className="text-gray-700 text-xs bg-gray-50 border-l-4 border-emerald-500 p-3 rounded mt-2 leading-relaxed whitespace-pre-line">
-                  📘 {repo.summary_detail}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      {/* Velog Trending */}
-      <Card title="📝 Velog Trending Posts">
-        <ul className="space-y-3">
-          {(publicData.velog_trending || []).map((post, i) => (
-            <li key={i} className="border-b pb-3 last:border-none">
-              <a
-                href={post.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-emerald-600 font-semibold"
-              >
-                {post.title}
-              </a>
-              <p className="text-gray-500 text-sm">{post.summary}</p>
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </>
-  );
-
-  // ================================
-  // PERSONAL VIEW
-  // ================================
-  const PersonalView = () => (
-    <>
-      {/* GitHub Updates */}
-      <Card title="🔧 GitHub Updates (Your Tech Stack)">
-        <ul className="space-y-3">
-          {(personalData.github_updates || []).map((repo, i) => (
-            <li key={i} className="border-b pb-3 last:border-none">
-              <div className="flex justify-between">
-                <span className="font-medium">{repo.full_name}</span>
-                <span className="text-yellow-500">⭐ {repo.stars}</span>
-              </div>
-              <p className="text-gray-500 text-sm">{repo.description}</p>
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      {/* Velog Recommended */}
-      <Card title="📝 Recommended Velog Articles">
-        <ul className="space-y-3">
-          {(personalData.velog_recommended || []).map((post, i) => (
-            <li key={i} className="border-b pb-3 last:border-none">
-              <a
-                href={post.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-emerald-600 font-semibold"
-              >
-                {post.title}
-              </a>
-              <p className="text-gray-500 text-sm">{post.summary}</p>
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </>
-  );
-
-  // ================================
-  // FINAL RENDER
-  // ================================
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
+
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-800">Dev Dashboard</h1>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-gray-500 mt-1">
           Mode:{" "}
           <span className="font-semibold text-emerald-600">
-            {isPublic ? "Public" : "Personalized"}
+            {data.mode}
           </span>
         </p>
       </div>
 
-      {/* GRID */}
+      {/* Grid Layout */}
       <div className="grid grid-cols-3 gap-6">
+
+        {/* Left Panel */}
         <div className="col-span-2 space-y-6">
-          {isPublic ? <PublicView /> : <PersonalView />}
+          {isPublic ? (
+            <>
+              <Card title="🔥 Velog Trending">
+                <ul className="space-y-3">
+                  {data.velog_trending.map((post, i) => (
+                    <VelogItem key={i} post={post} />
+                  ))}
+                </ul>
+              </Card>
+
+              <Card title="⭐ GitHub Trending">
+                <ul className="space-y-4">
+                  {data.github_trending.map((repo, i) => (
+                    <RepoItem key={i} repo={repo} />
+                  ))}
+                </ul>
+              </Card>
+            </>
+          ) : (
+            <>
+              <Card title="📝 관심사 기반 추천 글">
+                <ul className="space-y-3">
+                  {data.velog_interest_match.map((post, i) => (
+                    <VelogItem key={i} post={post} />
+                  ))}
+                </ul>
+              </Card>
+
+              <Card title="✨ 개인 RSS 기반 추천 글">
+                <ul className="space-y-3">
+                  {data.velog_recommended.map((post, i) => (
+                    <VelogItem key={i} post={post} />
+                  ))}
+                </ul>
+              </Card>
+
+              <Card title="🔧 GitHub 추천 프로젝트">
+                <ul className="space-y-4">
+                  {data.github_recommended.map((repo, i) => (
+                    <RepoItem key={i} repo={repo} />
+                  ))}
+                </ul>
+              </Card>
+
+              <Card title="🔥 GitHub Trending (참고용)">
+                <ul className="space-y-4">
+                  {data.github_trending.map((repo, i) => (
+                    <RepoItem key={i} repo={repo} />
+                  ))}
+                </ul>
+              </Card>
+            </>
+          )}
         </div>
 
+        {/* Right Sidebar */}
         <div className="space-y-6">
-          <RightSidebar />
+          {isPublic ? (
+            <Card title="🏷 인기 태그">
+              <ul className="space-y-2">
+                {data.velog_tags.map((tag, i) => (
+                  <li
+                    key={i}
+                    className="flex justify-between border-b pb-2 last:border-none"
+                  >
+                    <span>#{tag.tag}</span>
+                    <span className="text-gray-400">{tag.count}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : (
+            <Card title="🔍 개인화 안내">
+              <p className="text-gray-600 text-sm">
+                회원님의 관심 키워드를 기반으로  
+                Velog & GitHub 최신 콘텐츠를 추천해드리고 있어요.
+              </p>
+            </Card>
+          )}
         </div>
       </div>
     </div>
