@@ -11,17 +11,25 @@ from database.models import UserProfile
 from services.dev_service import (
     build_public_feed,
     build_personal_feed,
-    fetch_github_trending,
-    fetch_velog_by_tag_html,
-    fetch_velog_trending_html,
+    get_source_feed,
+    search_by_tag,
+    refresh_all_sources,
+    collect_all_tags,
 )
 
-router = APIRouter(prefix="/api/dev", tags=["Dev"])
+from schemas.dev_schema import (
+    PublicDevFeedResponse,
+    PersonalDevFeedResponse,
+    SourceFeedResponse,
+    TagSearchResponse,
+)
+
+router = APIRouter(prefix="/api/dev", tags=["DevDashboard"])
 
 
-# -------------------------------------------------------
-# DB 세션
-# -------------------------------------------------------
+# -------------------------------------------------------------
+# DB 의존성
+# -------------------------------------------------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -30,74 +38,107 @@ def get_db():
         db.close()
 
 
-# -------------------------------------------------------
-# 🔥 통합 Dev Feed (자동 분기)
-# -------------------------------------------------------
-@router.get("/")
+# -------------------------------------------------------------
+# 🔥 자동 Public ↔ Personal 전환
+# -------------------------------------------------------------
+@router.get("/", response_model=dict)
 def dev_feed(
-    db: Session = Depends(get_db),
     current_user: UserProfile = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
 ):
-    """
-    로그인 O → Personal
-    로그인 X → Public
-    """
+    try:
+        if current_user is None:
+            return build_public_feed(db)
+        return build_personal_feed(current_user, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # 로그인 X
+
+# -------------------------------------------------------------
+# 🔵 Public Feed
+# -------------------------------------------------------------
+@router.get("/public", response_model=PublicDevFeedResponse)
+def dev_public(db: Session = Depends(get_db)):
+    try:
+        return build_public_feed(db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# -------------------------------------------------------------
+# 🟣 Personal Feed (로그인 필요)
+# -------------------------------------------------------------
+@router.get("/personal", response_model=PersonalDevFeedResponse)
+def dev_personal(
+    current_user: UserProfile = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
     if current_user is None:
-        return build_public_feed()
+        raise HTTPException(status_code=401, detail="로그인이 필요한 기능입니다.")
 
-    # 로그인 O
     try:
         return build_personal_feed(current_user, db)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"개인화 피드 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# -------------------------------------------------------
-# Public feed (직접 접근)
-# -------------------------------------------------------
-@router.get("/public")
-def dev_public():
-    return build_public_feed()
+# -------------------------------------------------------------
+# 🔍 Source Feed — OKKY & DEVTO만 허용
+# -------------------------------------------------------------
+@router.get("/source/{source}", response_model=SourceFeedResponse)
+def dev_source_feed(source: str, db: Session = Depends(get_db)):
+    source = source.lower()
+    if source not in ["okky", "devto"]:
+        raise HTTPException(status_code=400, detail="Invalid Source (okky, devto만 지원)")
 
-
-# -------------------------------------------------------
-# GitHub Trending
-# -------------------------------------------------------
-@router.get("/github")
-def github_trending(language: str = "", since: str = "daily"):
     try:
-        return {"results": fetch_github_trending(language, since)}
+        rows = get_source_feed(db, source)
+        return SourceFeedResponse(
+            source=source,
+            total=len(rows),
+            items=rows,
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"GitHub Trending 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# -------------------------------------------------------
-# Velog by Tag
-# -------------------------------------------------------
-@router.get("/velog/tag")
-def velog_by_tag(tag: str):
+# -------------------------------------------------------------
+# 🏷 Tag 검색
+# -------------------------------------------------------------
+@router.get("/search", response_model=TagSearchResponse)
+def dev_search(tag: str, db: Session = Depends(get_db)):
     try:
-        return {"results": fetch_velog_by_tag_html(tag)}
+        return search_by_tag(db, tag)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Velog 태그 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# -------------------------------------------------------
-# Velog Trending
-# -------------------------------------------------------
-@router.get("/velog/trending")
-def velog_trending():
+# -------------------------------------------------------------
+# 🔄 Refresh All Sources (OKKY + DEVTO)
+# -------------------------------------------------------------
+@router.get("/refresh")
+def dev_refresh(db: Session = Depends(get_db)):
     try:
-        return {"results": fetch_velog_trending_html()}
+        return refresh_all_sources(db)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Velog Trending 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# -------------------------------------------------------
-# Health check
-# -------------------------------------------------------
+# -------------------------------------------------------------
+# 🔖 전체 태그
+# -------------------------------------------------------------
+@router.get("/tags")
+def dev_tags(db: Session = Depends(get_db)):
+    try:
+        tags = collect_all_tags(db)
+        return {"tags": tags}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# -------------------------------------------------------------
+# ❤️ Health Check
+# -------------------------------------------------------------
 @router.get("/health")
 def dev_health():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "dev-dashboard"}

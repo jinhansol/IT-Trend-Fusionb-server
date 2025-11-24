@@ -2,261 +2,263 @@
 # flake8: noqa
 
 """
-🔥 Dev Dashboard Service (A 방식 – Velog 중심 / GitHub 보조)
-- 모든 스크래핑 로직을 이 파일 하나에 통합
-- import 오류, 모듈 분리 문제 완전 해결
+🔥 DevDashboard v4 – Service Layer (Tistory 제거 버전)
+- OKKY / Dev.to 크롤링
+- JSON/DateTime 안정화
+- DB upsert
+- Public / Personal / Source Feed
 """
 
-import requests
-from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
+from sqlalchemy import select, desc, or_, func
+from datetime import datetime
+import traceback
 
-from database.models import UserProfile, UserInterest
+from database.models import DevPost, DevUserPreference, UserInterest
+from schemas.dev_schema import (
+    PublicDevFeedResponse,
+    PersonalDevFeedResponse,
+    SourceFeedResponse,
+    TagSearchResponse,
+)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "text/html",
-}
-
-
-
-# ===========================================================
-# 🔥 0) Helpers: Unique 필터
-# ===========================================================
-def unique(items, key):
-    seen = set()
-    result = []
-    for x in items:
-        k = x.get(key)
-        if k not in seen:
-            seen.add(k)
-            result.append(x)
-    return result
-
+from services.dev_scraper import (
+    fetch_okky_latest,
+    fetch_devto_latest,
+)
 
 
 # ===========================================================
-# 🔥 1) Velog Trending (HTML 크롤링)
+# Helper – published_at 보정
 # ===========================================================
-def fetch_velog_trending_html():
-    url = "https://v2.velog.io/api/posts?sort=trending"
+def normalize_datetime(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
     try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code != 200:
-            return []
-        arr = res.json()
+        return datetime.fromisoformat(value.replace("Z", ""))
     except:
+        return None
+
+
+# ===========================================================
+# Helper – tags 보정
+# ===========================================================
+def normalize_tags(value):
+    if value is None:
         return []
-
-    results = []
-    for p in arr[:15]:
-        results.append({
-            "title": p["title"],
-            "username": p["user"]["username"],
-            "url": f"https://velog.io/@{p['user']['username']}/{p['url_slug']}",
-            "likes": p["likes"],
-            "thumbnail": p.get("thumbnail"),
-            "summary": p["title"],
-        })
-    return results
-
+    if isinstance(value, list):
+        return value
+    return []
 
 
 # ===========================================================
-# 🔥 2) Velog Popular Tags
+# 🔧 DB 저장 함수 (통합)
 # ===========================================================
-def fetch_velog_tags_html():
-    url = "https://v2.velog.io/api/tags"
+def save_posts(db: Session, posts: list):
+    inserted, updated = 0, 0
+
+    for p in posts:
+        try:
+            p["tags"] = normalize_tags(p.get("tags"))
+            p["published_at"] = normalize_datetime(p.get("published_at"))
+
+            exist = db.execute(
+                select(DevPost).where(
+                    DevPost.source == p["source"],
+                    DevPost.source_id == p["source_id"],
+                )
+            ).scalar_one_or_none()
+
+            if exist:
+                exist.title = p["title"]
+                exist.url = p["url"]
+                exist.author = p.get("author")
+                exist.summary = p.get("summary")
+                exist.tags = p["tags"]
+                exist.like_count = p.get("like_count", 0)
+                exist.comment_count = p.get("comment_count", 0)
+                exist.view_count = p.get("view_count", 0)
+                exist.published_at = p["published_at"]
+                exist.crawled_at = datetime.utcnow()
+                updated += 1
+            else:
+                new_post = DevPost(
+                    source=p["source"],
+                    source_id=p["source_id"],
+                    title=p["title"],
+                    url=p["url"],
+                    author=p.get("author"),
+                    summary=p.get("summary"),
+                    tags=p["tags"],
+                    like_count=p.get("like_count", 0),
+                    comment_count=p.get("comment_count", 0),
+                    view_count=p.get("view_count", 0),
+                    published_at=p["published_at"],
+                    crawled_at=datetime.utcnow(),
+                )
+                db.add(new_post)
+                inserted += 1
+
+        except Exception as e:
+            print("❌ Error saving post:", e)
+            print("Payload:", p)
+            traceback.print_exc()
+
+    db.commit()
+    return inserted, updated
+
+
+# ===========================================================
+# 🔥 Source별 feed
+# ===========================================================
+def get_source_feed(db: Session, source: str, limit=20):
+    query = (
+        select(DevPost)
+        .where(DevPost.source == source)
+        .order_by(desc(DevPost.published_at), desc(DevPost.crawled_at))
+        .limit(limit)
+    )
+    return db.execute(query).scalars().all()
+
+
+# ===========================================================
+# 🔥 Public feed
+# ===========================================================
+def build_public_feed(db: Session):
     try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code != 200:
-            return []
-        arr = res.json()
-    except:
-        return []
-    return [{"tag": t["name"], "count": t["count"]} for t in arr[:20]]
+        okky_data = fetch_okky_latest(limit=20)
+        devto_data = fetch_devto_latest(limit=20)
 
+        save_posts(db, okky_data)
+        save_posts(db, devto_data)
 
+        okky = get_source_feed(db, "okky")
+        devto = get_source_feed(db, "devto")
 
-# ===========================================================
-# 🔥 3) Velog By Tag
-# ===========================================================
-def fetch_velog_by_tag_html(tag):
-    url = f"https://v2.velog.io/api/posts?tag={tag}"
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code != 200:
-            return []
-        arr = res.json()
-    except:
-        return []
+        return PublicDevFeedResponse(
+            okky=okky,
+            devto=devto,
+            updated_at=datetime.utcnow(),
+        )
 
-    results = []
-    for p in arr[:10]:
-        results.append({
-            "title": p["title"],
-            "username": p["user"]["username"],
-            "url": f"https://velog.io/@{p['user']['username']}/{p['url_slug']}",
-            "likes": p["likes"],
-            "thumbnail": p.get("thumbnail"),
-            "summary": "",
-        })
-    return results
-
+    except Exception as e:
+        print("❌ build_public_feed ERROR:", e)
+        traceback.print_exc()
+        return PublicDevFeedResponse(
+            okky=[],
+            devto=[],
+            updated_at=datetime.utcnow()
+        )
 
 
 # ===========================================================
-# 🔥 4) Velog RSS (특정 유저 기반 추천)
+# 🔥 Personal feed
 # ===========================================================
-def fetch_velog_rss(username):
-    rss_url = f"https://v2.velog.io/rss/{username}"
-    try:
-        res = requests.get(rss_url, headers=HEADERS, timeout=10)
-        if res.status_code != 200:
-            return []
-        soup = BeautifulSoup(res.text, "xml")
-    except:
-        return []
+def build_personal_feed(current_user, db: Session):
+    user_id = current_user.id
 
-    items = soup.find_all("item")[:10]
-    results = []
-    for it in items:
-        results.append({
-            "title": it.title.text,
-            "url": it.link.text,
-            "summary": it.description.text if it.description else "",
-        })
-    return results
-
-
-
-# ===========================================================
-# 🔥 5) GitHub Trending (HTML 크롤링)
-# ===========================================================
-def fetch_github_trending(language="", since="daily"):
-
-    url = "https://github.com/trending"
-    if language:
-        url += f"/{language}"
-    url += f"?since={since}"
-
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code != 200:
-            return []
-        soup = BeautifulSoup(res.text, "html.parser")
-    except:
-        return []
-
-    rows = soup.select("article.Box-row")[:10]
-    results = []
-
-    for it in rows:
-        a = it.select_one("h2 a")
-        if not a:
-            continue
-
-        full_name = a.get("href", "").strip("/")
-        desc_el = it.select_one("p")
-        stars_el = it.select_one("a[href*='stargazers']")
-
-        results.append({
-            "full_name": full_name,
-            "url": f"https://github.com/{full_name}",
-            "description": desc_el.text.strip() if desc_el else "",
-            "stars": stars_el.text.strip() if stars_el else "0",
-        })
-
-    return results
-
-
-
-# ===========================================================
-# 🔥 6) Public Feed — 로그인 없이 제공
-# ===========================================================
-def build_public_feed():
-    velog_trending = fetch_velog_trending_html()
-    velog_tags = fetch_velog_tags_html()
-    github_trending = fetch_github_trending("", "daily")
-
-    return {
-        "mode": "public",
-        "velog_trending": velog_trending,
-        "velog_tags": velog_tags,
-        "github_trending": github_trending,
-
-        # personal용 필드들 (빈값)
-        "velog_recommended": [],
-        "velog_interest_match": [],
-        "github_recommended": [],
-    }
-
-
-
-# ===========================================================
-# 🔥 7) Personal Feed — 관심사 기반 추천
-# ===========================================================
-def build_personal_feed(user: UserProfile, db: Session):
-
-    # 관심 키워드 불러오기
     interests = (
         db.query(UserInterest)
-        .filter(UserInterest.user_id == user.id)
+        .filter(UserInterest.user_id == user_id)
         .order_by(UserInterest.id.desc())
         .all()
     )
-    keywords = [i.keyword for i in interests]
+    interest_tags = [i.keyword for i in interests]
 
-    # ---------------------------
-    # Velog: 태그 기반 추천
-    # ---------------------------
-    velog_interest_match = []
-    for kw in keywords:
-        posts = fetch_velog_by_tag_html(kw)
-        if posts:
-            velog_interest_match.extend(posts[:5])
+    if not interest_tags:
+        return build_public_feed(db)
 
-    # ---------------------------
-    # Velog: RSS 기반 유저 취향 추천 (@username)
-    # ---------------------------
-    velog_recommended = []
-    for kw in keywords:
-        if kw.startswith("@"):
-            rss_posts = fetch_velog_rss(kw.replace("@", ""))
-            if rss_posts:
-                velog_recommended.extend(rss_posts[:5])
+    from_okky, from_devto = [], []
 
-    # ---------------------------
-    # GitHub: 관심 기술 기반 추천
-    # ---------------------------
-    github_recommended = []
-    for kw in keywords:
-        repos = fetch_github_trending(language=kw, since="daily")
-        github_recommended.extend(repos[:5])
+    for tag in interest_tags:
+        # OKKY
+        okky_rows = (
+            db.query(DevPost)
+            .filter(
+                DevPost.source == "okky",
+                or_(
+                    DevPost.title.ilike(f"%{tag}%"),
+                    DevPost.summary.ilike(f"%{tag}%") if DevPost.summary is not None else False,
+                ),
+            ).all()
+        )
+        from_okky.extend(okky_rows)
 
-    # ---------------------------
-    # 중복 제거
-    # ---------------------------
-    velog_interest_match = unique(velog_interest_match, "url")
-    velog_recommended = unique(velog_recommended, "url")
-    github_recommended = unique(github_recommended, "url")
+        # Dev.to
+        devto_rows = (
+            db.query(DevPost)
+            .filter(
+                DevPost.source == "devto",
+                func.json_contains(DevPost.tags, f'"{tag}"'),
+            ).all()
+        )
+        from_devto.extend(devto_rows)
 
-    # ---------------------------
-    # Public Trending도 포함
-    # ---------------------------
-    velog_trending = fetch_velog_trending_html()
-    github_trending = fetch_github_trending()
+    recommended = list({p.id: p for p in (from_okky + from_devto)}.values())
+
+    recommended = sorted(
+        recommended,
+        key=lambda x: (x.published_at or datetime.min, x.crawled_at),
+        reverse=True,
+    )
+
+    return PersonalDevFeedResponse(
+        interests=interest_tags,
+        from_okky=from_okky,
+        from_devto=from_devto,
+        recommended=recommended,
+        updated_at=datetime.utcnow(),
+    )
+
+
+# ===========================================================
+# 🔍 Tag Search
+# ===========================================================
+def search_by_tag(db: Session, tag: str, limit=30):
+    rows = (
+        db.query(DevPost)
+        .filter(
+            or_(
+                DevPost.title.ilike(f"%{tag}%"),
+                DevPost.summary.ilike(f"%{tag}%") if DevPost.summary is not None else False,
+                func.json_contains(DevPost.tags, f'"{tag}"'),
+            )
+        )
+        .order_by(desc(DevPost.published_at), desc(DevPost.crawled_at))
+        .limit(limit)
+        .all()
+    )
+
+    return TagSearchResponse(tag=tag, items=rows, total=len(rows))
+
+
+# ===========================================================
+# 🔄 Refresh (OKKY + DEVTO만)
+# ===========================================================
+def refresh_all_sources(db: Session):
+    okky = fetch_okky_latest(limit=50)
+    devto = fetch_devto_latest(limit=50)
+
+    r1 = save_posts(db, okky)
+    r2 = save_posts(db, devto)
 
     return {
-        "mode": "personal",
-        "interests": keywords,
-
-        "velog_interest_match": velog_interest_match,
-        "velog_recommended": velog_recommended,
-        "velog_trending": velog_trending,
-
-        "github_recommended": github_recommended,
-        "github_trending": github_trending,
-
-        "velog_tags": [],
+        "okky": {"inserted": r1[0], "updated": r1[1]},
+        "devto": {"inserted": r2[0], "updated": r2[1]},
     }
+
+
+# ===========================================================
+# 🔥 전체 태그 수집
+# ===========================================================
+def collect_all_tags(db: Session):
+    items = db.query(DevPost).all()
+    all_tags = []
+
+    for i in items:
+        if i.tags:
+            all_tags.extend(i.tags)
+
+    return sorted(list(set(all_tags)))
