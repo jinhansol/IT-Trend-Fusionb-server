@@ -176,6 +176,16 @@ class DevPost(Base):
     published_at = Column(DateTime, nullable=True)
     crawled_at = Column(DateTime, default=datetime.utcnow)
 
+    # -------------------------------------------------------------
+    # 🆕 추가되는 핵심 컬럼 4개
+    # -------------------------------------------------------------
+    topic_primary = Column(String(50), nullable=True)   # 키워드 기반 자동 분류
+    issue_primary = Column(String(50), nullable=True)
+
+    topic_ai = Column(String(50), nullable=True)        # AI 기반 의미 분류
+    issue_ai = Column(String(50), nullable=True)
+
+
 
 # ===================================================================
 # 🆕 DevDashboard v4 — 사용자 선호도

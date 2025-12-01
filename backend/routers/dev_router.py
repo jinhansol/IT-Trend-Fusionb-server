@@ -1,4 +1,4 @@
-# routers/dev_router.py
+# backend/routers/dev_router.py
 # flake8: noqa
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,11 +15,13 @@ from services.dev_service import (
     search_by_tag,
     refresh_all_sources,
     collect_all_tags,
+    build_topic_clusters,
+    build_issue_stats,
 )
 
+# 통합된 스키마 사용 (중요!)
 from schemas.dev_schema import (
-    PublicDevFeedResponse,
-    PersonalDevFeedResponse,
+    DevFeedResponse, 
     SourceFeedResponse,
     TagSearchResponse,
 )
@@ -27,9 +29,6 @@ from schemas.dev_schema import (
 router = APIRouter(prefix="/api/dev", tags=["DevDashboard"])
 
 
-# -------------------------------------------------------------
-# DB 의존성
-# -------------------------------------------------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -39,65 +38,64 @@ def get_db():
 
 
 # -------------------------------------------------------------
-# 🔥 자동 Public ↔ Personal 전환
+# 🔥 자동 Public ↔ Personal Feed
 # -------------------------------------------------------------
-@router.get("/", response_model=dict)
+@router.get("/", response_model=DevFeedResponse)
 def dev_feed(
     current_user: UserProfile = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    try:
-        if current_user is None:
-            return build_public_feed(db)
-        return build_personal_feed(current_user, db)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    if current_user is None:
+        return build_public_feed(db)
+    return build_personal_feed(current_user, db)
 
 
 # -------------------------------------------------------------
 # 🔵 Public Feed
 # -------------------------------------------------------------
-@router.get("/public", response_model=PublicDevFeedResponse)
+@router.get("/public", response_model=DevFeedResponse)
 def dev_public(db: Session = Depends(get_db)):
-    try:
-        return build_public_feed(db)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return build_public_feed(db)
 
 
 # -------------------------------------------------------------
-# 🟣 Personal Feed (로그인 필요)
+# 🟣 Personal Feed (로그인 안 해도 에러 안 나고 Public 줌)
 # -------------------------------------------------------------
-@router.get("/personal", response_model=PersonalDevFeedResponse)
+@router.get("/personal", response_model=DevFeedResponse)
 def dev_personal(
     current_user: UserProfile = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
+    # 로그인 X → public 반환 (Fallback)
     if current_user is None:
-        raise HTTPException(status_code=401, detail="로그인이 필요한 기능입니다.")
+        return build_public_feed(db)
 
+    # 로그인 O → personalized feed
     try:
         return build_personal_feed(current_user, db)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Personal Feed Error: {e}")
+        # 에러 나면 안전하게 Public 반환
+        return build_public_feed(db)
 
 
 # -------------------------------------------------------------
-# 🔍 Source Feed — OKKY & DEVTO만 허용
+# 🔍 Source Feed
 # -------------------------------------------------------------
 @router.get("/source/{source}", response_model=SourceFeedResponse)
-def dev_source_feed(source: str, db: Session = Depends(get_db)):
+def dev_source_feed(
+    source: str,
+    page: int = 1,
+    size: int = 10,
+    db: Session = Depends(get_db),
+):
     source = source.lower()
     if source not in ["okky", "devto"]:
-        raise HTTPException(status_code=400, detail="Invalid Source (okky, devto만 지원)")
+        raise HTTPException(status_code=400, detail="Invalid Source")
 
     try:
-        rows = get_source_feed(db, source)
-        return SourceFeedResponse(
-            source=source,
-            total=len(rows),
-            items=rows,
-        )
+        items, total = get_source_feed(db, source, page, size)
+        return SourceFeedResponse(source=source, total=total, items=items)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -107,33 +105,24 @@ def dev_source_feed(source: str, db: Session = Depends(get_db)):
 # -------------------------------------------------------------
 @router.get("/search", response_model=TagSearchResponse)
 def dev_search(tag: str, db: Session = Depends(get_db)):
-    try:
-        return search_by_tag(db, tag)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return search_by_tag(db, tag)
 
 
 # -------------------------------------------------------------
-# 🔄 Refresh All Sources (OKKY + DEVTO)
+# 🔄 전체 갱신
 # -------------------------------------------------------------
 @router.get("/refresh")
 def dev_refresh(db: Session = Depends(get_db)):
-    try:
-        return refresh_all_sources(db)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return refresh_all_sources(db)
 
 
 # -------------------------------------------------------------
-# 🔖 전체 태그
+# 🔖 전체 태그 목록
 # -------------------------------------------------------------
 @router.get("/tags")
 def dev_tags(db: Session = Depends(get_db)):
-    try:
-        tags = collect_all_tags(db)
-        return {"tags": tags}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    tags = collect_all_tags(db)
+    return {"tags": tags}
 
 
 # -------------------------------------------------------------
@@ -142,3 +131,15 @@ def dev_tags(db: Session = Depends(get_db)):
 @router.get("/health")
 def dev_health():
     return {"status": "ok", "service": "dev-dashboard"}
+
+
+# -------------------------------------------------------------
+# 🔥 Insight
+# -------------------------------------------------------------
+@router.get("/insight/topic")
+def dev_topic_insight(db: Session = Depends(get_db)):
+    return build_topic_clusters(db)
+
+@router.get("/insight/issues")
+def dev_issue_insight(db: Session = Depends(get_db)):
+    return build_issue_stats(db)

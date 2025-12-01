@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link, NavLink } from "react-router-dom";
-import LoginPopup from "../modals/LoginPopup";
-import SignupPopup from "../modals/SignupPopup";
-import InterestPopup from "../modals/InterestPopup";
+
+// ✅ 경로 수정: 한 단계 더 위로 올라가야 함 (../ -> ../../)
+import LoginPopup from "../../modals/LoginPopup";
+import SignupPopup from "../../modals/SignupPopup";
+import InterestPopup from "../../modals/InterestPopup";
 
 export default function HeaderNav() {
   const [user, setUser] = useState(null);
@@ -19,27 +21,34 @@ export default function HeaderNav() {
   // 첫 로그인 → 관심사 팝업 자동 표시
   useEffect(() => {
     if (!user) return;
-
     const first = localStorage.getItem("firstLogin");
-
     if (first === "true") {
       setShowInterest(true);
       localStorage.setItem("firstLogin", "false");
     }
   }, [user]);
 
-  // 로그아웃
+  // -------------------------------------------------------------
+  // 🚪 로그아웃 (여기를 수정했습니다!)
+  // -------------------------------------------------------------
   const handleLogout = () => {
+    // 1. 저장된 모든 정보 삭제
     localStorage.removeItem("user");
+    localStorage.removeItem("token"); // 토큰 삭제 필수
     localStorage.removeItem("firstLogin");
+    
+    // 2. 상태 초기화
     setUser(null);
+
+    // 3. ✨ [핵심] 페이지를 강제로 새로고침하며 홈으로 이동
+    // 이렇게 해야 Career/Dev 페이지에 남아있던 개인화 데이터가 싹 날아갑니다.
+    window.location.href = "/";
   };
 
   const navItems = [
     { name: "Home", path: "/" },
     { name: "Career", path: "/career" },
     { name: "Dev", path: "/dev" },
-    { name: "AI Insight", path: "/insight" },
   ];
 
   const filteredNavItems = navItems.filter((item) => {
@@ -49,8 +58,7 @@ export default function HeaderNav() {
 
     if (focus === "career") return item.name !== "Dev";
     if (focus === "dev") return item.name !== "Career";
-    if (focus === "insight") return item.name === "AI Insight" || item.name === "Home";
-
+    
     return true;
   });
 

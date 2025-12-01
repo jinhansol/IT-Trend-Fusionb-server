@@ -3,12 +3,12 @@ import axios from "axios";
 
 const API_BASE = "http://localhost:8000/api/dev";
 
-// Axios 전용 인스턴스
+// Axios 인스턴스
 const api = axios.create({
   baseURL: API_BASE,
 });
 
-// 요청마다 자동 토큰 포함
+// 토큰 자동 포함
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token")?.trim();
   if (token && token !== "null" && token !== "undefined") {
@@ -44,31 +44,15 @@ export async function fetchDevPersonal() {
 }
 
 // -----------------------------
-// 📌 태그 필터
+// 📌 Source별 페이지네이션
+// /source/okky?page=1&size=10
 // -----------------------------
-export async function fetchFilteredDevFeed(tags) {
+export async function fetchDevSource(source, page = 1, size = 10) {
   try {
-    const query = tags.length ? `?tags=${tags.join(",")}` : "";
-    const res = await api.get(`/filter${query}`);
+    const res = await api.get(`/source/${source}?page=${page}&size=${size}`);
     return res.data;
   } catch (err) {
-    console.error("❌ fetchFilteredDevFeed error:", err);
-    throw err;
-  }
-}
-
-// -----------------------------
-// 📌 view_count 증가
-// -----------------------------
-export async function increaseViewCount(source, postId) {
-  try {
-    const res = await api.post("/view", {
-      source,
-      post_id: postId,
-    });
-    return res.data;
-  } catch (err) {
-    console.error("❌ increaseViewCount error:", err);
+    console.error("❌ fetchDevSource error:", err);
     throw err;
   }
 }
@@ -82,6 +66,32 @@ export async function fetchDevTags() {
     return res.data;
   } catch (err) {
     console.error("❌ fetchDevTags error:", err);
+    throw err;
+  }
+}
+
+/* ================================================
+ 🔥 NEW — Topic Insight (Topic Cluster)
+================================================= */
+export async function fetchDevTopicInsight() {
+  try {
+    const res = await api.get("/insight/topic");
+    return res.data;
+  } catch (err) {
+    console.error("❌ fetchDevTopicInsight error:", err);
+    throw err;
+  }
+}
+
+/* ================================================
+ 🔥 NEW — Issue Insight (Error/Performance/Deploy 통계)
+================================================= */
+export async function fetchDevIssueInsight() {
+  try {
+    const res = await api.get("/insight/issues");
+    return res.data;
+  } catch (err) {
+    console.error("❌ fetchDevIssueInsight error:", err);
     throw err;
   }
 }

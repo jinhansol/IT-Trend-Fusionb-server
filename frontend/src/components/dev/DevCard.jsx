@@ -22,7 +22,7 @@ export default function DevCard({ item }) {
 
       {/* 설명(summary) */}
       {item.summary && (
-        <p className="text-gray-700 text-sm mt-3 line-clamp-2">
+        <p className="text-gray-700 text-sm mt-3 line-clamp-5">
           {item.summary}
         </p>
       )}

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { fetchHomeFeed } from "../api/homeAPI";
-import NewsCard from "../components/NewsCard";
+// ✅ 경로 수정: components/home
+import NewsCard from "../components/home/NewsCard";
+import TrendChart from "../components/home/TrendChart";
 
 import {
   PieChart,
@@ -12,9 +14,6 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  CartesianGrid,
 } from "recharts";
 
 const COLORS = ["#2563EB", "#0EA5E9", "#38BDF8", "#4ADE80", "#F87171", "#A78BFA", "#FB923C"];
@@ -36,24 +35,27 @@ export default function Home() {
     const loadFeed = async () => {
       try {
         const data = await fetchHomeFeed();
-
-        setFeed({
-          news: data.news || [],
-          charts: data.charts || {
-            category_ratio: [],
-            keyword_ranking: [],
-            weekly_trend: [],
-          },
-        });
+        if (data) {
+          setFeed({
+            news: data.news || [],
+            charts: data.charts || {
+              category_ratio: [],
+              keyword_ranking: [],
+              weekly_trend: [],
+            },
+          });
+        }
       } catch (err) {
         console.error(err);
-        setError("데이터를 불러오는 중 오류가 발생했습니다.");
       } finally {
         setLoading(false);
       }
     };
 
     loadFeed();
+    // 60초 갱신 유지
+    const intervalId = setInterval(loadFeed, 60000);
+    return () => clearInterval(intervalId);
   }, []);
 
   if (loading) {
@@ -64,7 +66,7 @@ export default function Home() {
     );
   }
 
-  if (error) {
+  if (error && feed.news.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen text-red-500">
         ❌ {error}
@@ -77,11 +79,8 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
       <main className="max-w-6xl mx-auto px-8 py-10">
-
-        {/* 뉴스 */}
         <section className="mt-6">
           <h2 className="text-2xl font-semibold mb-6">📰 최신 기술 뉴스</h2>
-
           {feed.news.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {feed.news.slice(0, 8).map((item, idx) => (
@@ -89,18 +88,18 @@ export default function Home() {
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-10">표시할 뉴스가 없습니다.</p>
+            <div className="text-center py-10">
+                <p className="text-gray-500 mb-2">아직 뉴스를 수집하고 있습니다.</p>
+                <p className="text-sm text-blue-400 animate-pulse">잠시만 기다려주세요... (자동 갱신 중)</p>
+            </div>
           )}
         </section>
 
-        {/* 트렌드 */}
         <section className="mt-20">
           <h2 className="text-2xl font-semibold mb-10">📊 IT 기술 트렌드 분석</h2>
 
-          {/* 카테고리 비중 */}
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-14">
             <h3 className="font-semibold text-lg mb-4">기술 카테고리 비중</h3>
-
             {category_ratio.length > 0 ? (
               <>
                 <ResponsiveContainer width="100%" height={300}>
@@ -113,7 +112,6 @@ export default function Home() {
                     <Tooltip />
                   </PieChart>
                 </ResponsiveContainer>
-
                 <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {category_ratio.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2">
@@ -123,13 +121,11 @@ export default function Home() {
                   ))}
                 </div>
               </>
-            ) : <p className="text-gray-400 text-sm">데이터 없음</p>}
+            ) : <p className="text-gray-400 text-sm">데이터 분석 중...</p>}
           </div>
 
-          {/* 키워드 */}
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-14">
             <h3 className="font-semibold text-lg mb-4">핫 키워드 TOP 20</h3>
-
             {keyword_ranking.length > 0 ? (
               <>
                 <ResponsiveContainer width="100%" height={350}>
@@ -140,7 +136,6 @@ export default function Home() {
                     <Bar dataKey="count" fill="#2563EB" />
                   </BarChart>
                 </ResponsiveContainer>
-
                 <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {keyword_ranking.slice(0, 12).map((item, idx) => (
                     <div key={idx} className="text-sm">
@@ -149,26 +144,10 @@ export default function Home() {
                   ))}
                 </div>
               </>
-            ) : <p className="text-gray-400 text-sm">데이터 없음</p>}
+            ) : <p className="text-gray-400 text-sm">데이터 분석 중...</p>}
           </div>
 
-          {/* 주별 변화 */}
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-            <h3 className="font-semibold text-lg mb-4">주별 기술 트렌드 변화</h3>
-
-            {weekly_trend.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={weekly_trend}>
-                  <XAxis dataKey="week" />
-                  <YAxis />
-                  <Tooltip />
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <Line type="monotone" dataKey="count" stroke="#0EA5E9" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : <p className="text-gray-400 text-sm">데이터 없음</p>}
-          </div>
-
+          <TrendChart data={weekly_trend} />
         </section>
       </main>
     </div>

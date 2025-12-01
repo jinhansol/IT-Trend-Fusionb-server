@@ -1,147 +1,109 @@
 import React, { useState } from "react";
-import { registerUser, checkEmail } from "../api/authAPI";
-import PopupLayout from "../components/PopupLayout";
+// ✅ 경로 수정: components/common
+import PopupLayout from "../components/common/PopupLayout";
+// ✅ API 수정: authAPI -> userAPI
+import { registerUser, checkEmail } from "../api/userAPI";
 
 export default function SignupPopup({ onClose, onSwitch, setUser }) {
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [emailAvailable, setEmailAvailable] = useState(null);
-  const [checking, setChecking] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    username: "",
+    main_focus: "Career", // 기본값
+  });
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
 
-  // 이메일 중복 체크
-  const handleCheckEmail = async () => {
-    if (!email) return;
-    setChecking(true);
-    try {
-      const exists = await checkEmail(email);
-      setEmailAvailable(!exists);
-    } catch {
-      setEmailAvailable(null);
-    } finally {
-      setChecking(false);
-    }
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // 회원가입 실행
-  const handleSignup = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setSuccess(false);
-
-    if (password !== confirmPassword) {
-      setError("비밀번호가 일치하지 않습니다.");
-      return;
-    }
-
-    if (emailAvailable === false) {
-      setError("이미 등록된 이메일입니다.");
-      return;
-    }
 
     try {
-      setLoading(true);
-      const result = await registerUser({ username, email, password });
+      // 1. 이메일 중복 체크
+      const exists = await checkEmail(formData.email);
+      if (exists) {
+        setError("이미 사용 중인 이메일입니다.");
+        return;
+      }
 
-      // 회원가입 후 자동 로그인처럼 user 저장
-      setUser(result.user);
-      localStorage.setItem("user", JSON.stringify(result.user));
-
-      // 첫 로그인 플래그
-      localStorage.setItem("firstLogin", "true");
-
-      setSuccess(true);
-
-      setTimeout(() => onClose(), 800);
+      // 2. 회원가입 요청
+      const data = await registerUser(formData);
+      
+      // 3. 바로 로그인 처리
+      setUser(data.user);
+      localStorage.setItem("token", data.access_token);
+      
+      onClose(); // 팝업 닫기 (또는 관심사 팝업으로 이어지게 처리 가능)
     } catch (err) {
-      setError(err.response?.data?.detail || "회원가입 실패. 다시 시도해주세요.");
-    } finally {
-      setLoading(false);
+      setError("회원가입 중 오류가 발생했습니다.");
     }
   };
 
   return (
-    <PopupLayout title="Create your account ✨" onClose={onClose}>
-      <form onSubmit={handleSignup} className="space-y-5">
-
+    <PopupLayout title="회원가입" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Username</label>
+          <label className="block text-sm font-medium text-gray-700">이메일</label>
           <input
+            name="email"
+            type="email"
+            className="w-full border p-2 rounded mt-1"
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">비밀번호</label>
+          <input
+            name="password"
+            type="password"
+            className="w-full border p-2 rounded mt-1"
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">이름 (닉네임)</label>
+          <input
+            name="username"
             type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            className="w-full border p-2 rounded mt-1"
+            onChange={handleChange}
             required
-            className="w-full border border-gray-300 rounded-md px-3 py-2"
           />
         </div>
-
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Email</label>
-          <div className="flex gap-2">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setEmailAvailable(null);
-              }}
-              onBlur={handleCheckEmail}
-              required
-              className="flex-1 border border-gray-300 rounded-md px-3 py-2"
-            />
-            {checking ? (
-              <span className="text-sm text-gray-500 self-center">확인 중...</span>
-            ) : emailAvailable === true ? (
-              <span className="text-sm text-emerald-600 self-center">✓ 사용 가능</span>
-            ) : emailAvailable === false ? (
-              <span className="text-sm text-red-500 self-center">이미 존재</span>
-            ) : null}
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="w-full border border-gray-300 rounded-md px-3 py-2"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Confirm Password</label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            className="w-full border border-gray-300 rounded-md px-3 py-2"
-          />
+          <label className="block text-sm font-medium text-gray-700">주요 관심 분야</label>
+          <select
+            name="main_focus"
+            className="w-full border p-2 rounded mt-1"
+            onChange={handleChange}
+            value={formData.main_focus}
+          >
+            <option value="Career">취업 (Career)</option>
+            <option value="Dev">개발 (Dev)</option>
+          </select>
         </div>
 
         {error && <p className="text-red-500 text-sm">{error}</p>}
-        {success && <p className="text-emerald-600 text-sm font-medium">회원가입 완료!</p>}
 
-        <button type="submit"
-          disabled={loading}
-          className="w-full bg-emerald-600 text-white py-2 rounded-md"
+        <button
+          type="submit"
+          className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
         >
-          {loading ? "Signing up..." : "Create Account"}
+          가입하기
         </button>
-      </form>
 
-      <div className="mt-8 text-center text-sm text-gray-500">
-        Already have an account?{" "}
-        <button onClick={onSwitch} className="text-emerald-600 font-medium hover:underline">
-          Sign In
-        </button>
-      </div>
+        <p className="text-center text-sm text-gray-600 mt-2">
+          이미 계정이 있으신가요?{" "}
+          <button type="button" onClick={onSwitch} className="text-blue-600 font-bold underline">
+            로그인
+          </button>
+        </p>
+      </form>
     </PopupLayout>
   );
 }

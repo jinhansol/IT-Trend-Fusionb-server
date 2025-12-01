@@ -4,281 +4,212 @@
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import List, Optional, Any
-
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+import json
+import re
 
 from database.mariadb import SessionLocal
 from database.models import CareerJob, UserProfile
 
+try:
+    from services.career_scraper import crawl_career_all
+except ImportError:
+    print("⚠️ career_scraper 모듈을 찾을 수 없습니다.")
+    def crawl_career_all(keyword, limit_per_site=20): return []
 
 ###########################################
-# 🔎 기술 키워드 리스트
+# 🗂️ 기술 스택 카테고리 정의 (소문자 기준)
 ###########################################
-TECH_KEYWORDS = [
-    "Python", "React", "Node", "TypeScript", "Vue",
-    "Next.js", "Java", "Spring", "Django", "Flutter",
-    "AWS", "Kubernetes", "Docker", "AI", "ML", "Data",
-]
+TECH_CATEGORIES = {
+    "frontend": {
+        "javascript", "typescript", "react", "vue", "vue.js", "next.js", "nextjs",
+        "html", "css", "svelte", "redux", "tailwind", "jquery", "bootstrap", "angular"
+    },
+    "backend": {
+        "java", "spring", "spring boot", "springboot", "python", "django", "flask", "fastapi",
+        "node.js", "node", "nestjs", "go", "golang", "kotlin", "php", "c#", ".net",
+        "mysql", "postgresql", "oracle", "mongodb", "redis", "docker", "aws", "kubernetes"
+    }
+}
 
+# 크롤링 검색어
+CORE_KEYWORDS = ["Java", "Python", "JavaScript", "AI", "React", "Spring"]
+
+# 키워드 매핑 (정규화)
+KEYWORD_MAPPING = {
+    "machine learning": "AI", "deep learning": "AI", 
+    "react": "React", "reactjs": "React", "vue": "Vue.js", "vue.js": "Vue.js", "next": "Next.js", "next.js": "Next.js",
+    "typescript": "TypeScript", "ts": "TypeScript", "javascript": "JavaScript", "js": "JavaScript",
+    "python": "Python", "java": "Java", "spring": "Spring", "springboot": "Spring Boot", "spring boot": "Spring Boot",
+    "django": "Django", "flask": "Flask", "fastapi": "FastAPI", 
+    "node": "Node.js", "node.js": "Node.js", "nestjs": "NestJS",
+    "golang": "Go", "go": "Go", "kotlin": "Kotlin",
+    "aws": "AWS", "docker": "Docker", "kubernetes": "Kubernetes", "k8s": "Kubernetes",
+    "mysql": "MySQL", "postgresql": "PostgreSQL", "redis": "Redis", "mongodb": "MongoDB"
+}
 
 ###########################################
-# 🧩 제목 기반 기술 추출
+# 🛠️ 유틸리티 함수들
 ###########################################
 def extract_skills_from_title(title: Optional[str]) -> List[str]:
     found: List[str] = []
-    if not title:
-        return found
+    if not title: return found
     lower_title = title.lower()
-    for skill in TECH_KEYWORDS:
-        if skill.lower() in lower_title:
-            found.append(skill)
-    return found
+    for keyword, tag_name in KEYWORD_MAPPING.items():
+        if keyword in lower_title: 
+            found.append(tag_name)
+    return list(set(found))
 
-
-###########################################
-# 🏷 태그 정규화
-###########################################
 def normalize_tags(raw_tags: Any, title: Optional[str] = None) -> List[str]:
     tags: List[str] = []
-
-    # 1) 기본 tag 처리
     if isinstance(raw_tags, list):
         for t in raw_tags:
-            if isinstance(t, str) and t.strip():
-                tags.append(t.strip())
-
+            if isinstance(t, str) and t.strip(): tags.append(t.strip())
     elif isinstance(raw_tags, str):
         for t in raw_tags.split(","):
             tag = t.strip()
-            if tag:
-                tags.append(tag)
+            if tag: tags.append(tag)
+    
+    if title: tags.extend(extract_skills_from_title(title))
 
-    # 2) 제목에서 기술 스킬 자동 추출
-    if title:
-        tags.extend(extract_skills_from_title(title))
-
-    # 3) 소문자 기준 중복 제거
     unique = {}
     for t in tags:
-        key = t.lower()
-        if key not in unique:
-            unique[key] = t
+        lower_t = t.lower()
+        final_name = KEYWORD_MAPPING.get(lower_t, t)
+        unique[final_name] = final_name
+        
+    return list(unique.values())[:5]
 
-    return list(unique.values())
-
-
-###########################################
-# ⏳ posted_date 파싱
-###########################################
 def parse_posted_date(raw: Any) -> datetime:
-    if isinstance(raw, datetime):
-        return raw
-
+    if isinstance(raw, datetime): return raw
     if isinstance(raw, str):
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(raw, fmt)
-            except ValueError:
-                continue
-
-        try:
-            return datetime.fromisoformat(raw)
-        except Exception:
-            pass
-
+            try: return datetime.strptime(raw, fmt)
+            except ValueError: continue
     return datetime.utcnow()
 
-
-###########################################
-# 📊 기술 트렌드 분석 (8주)
-###########################################
-def get_weekly_tech_trends(db: Session, weeks: int = 8):
-    end_date = datetime.now()
-    start_date = end_date - timedelta(weeks=weeks)
-
+# =========================================================
+# 📊 [핵심 수정] 카테고리별 기술 트렌드 분석
+# =========================================================
+def get_tech_trends_by_category(db: Session, category: str, weeks: int = 8):
+    """
+    category: 'frontend' | 'backend'
+    """
+    # 1. 날짜 조건 없이, 무조건 최신 수집된 공고 1000개를 가져옵니다. (데이터 확보 우선)
     jobs = (
         db.query(CareerJob)
-        .filter(CareerJob.posted_date >= start_date)
+        .order_by(CareerJob.id.desc()) # ID 역순 (최신순)
+        .limit(1000)
         .all()
     )
+    
+    target_skills = TECH_CATEGORIES.get(category, set())
+    counter = Counter()
 
-    weekly_counter = Counter()
+    print(f"📊 Analyzing {len(jobs)} jobs for {category}...") # 디버그 로그
 
     for job in jobs:
-        skills = extract_skills_from_title(job.title)
+        raw_list = []
+        tags_val = getattr(job, "tags", None)
+        
+        # 2. 태그 파싱 (강력하게)
+        if tags_val:
+            if isinstance(tags_val, list): 
+                raw_list = tags_val
+            elif isinstance(tags_val, str):
+                try: 
+                    # JSON 배열 ["A", "B"] 형태 시도
+                    raw_list = json.loads(tags_val)
+                except: 
+                    # 그냥 콤마 문자열 "A, B" 형태 시도
+                    raw_list = [t.strip() for t in tags_val.split(",") if t.strip()]
+        
+        # 3. 제목에서도 추출
+        raw_list.extend(extract_skills_from_title(job.title))
 
-        if job.tags:
-            if isinstance(job.tags, list):
-                for t in job.tags:
-                    if isinstance(t, str):
-                        skills.append(t)
+        # 4. 카운팅 (소문자 변환 후 매칭)
+        seen = set()
+        for s in raw_list:
+            if isinstance(s, str):
+                s_clean = s.strip()
+                s_lower = s_clean.lower()
+                
+                # 매핑된 정규화 이름도 확인 (예: reactjs -> react)
+                norm_key = KEYWORD_MAPPING.get(s_lower, s_clean)
+                norm_lower = norm_key.lower()
+                
+                # 해당 카테고리(프론트/백)에 속하는지 확인
+                if (s_lower in target_skills or norm_lower in target_skills) and norm_lower not in seen:
+                    counter[norm_key] += 1
+                    seen.add(norm_lower)
+    
+    # 5. 결과 반환 (디버그 로그 포함)
+    results = [{"skill": skill, "count": count} for skill, count in counter.most_common(6)]
+    print(f"✅ {category} Trends: {results}")
+    
+    return results
 
-        weekly_counter.update(skills)
-
-    return [
-        {"skill": skill, "count": count}
-        for skill, count in weekly_counter.most_common()
-    ]
-
-
-###########################################
-# 🎯 사용자 스킬 추출
-###########################################
-def get_user_skills(user: UserProfile):
-    if not user:
-        return []
-
-    raw = user.tech_stack
-
-    if isinstance(raw, list):
-        return [s for s in raw if isinstance(s, str) and s.strip()]
-
-    if isinstance(raw, str):
-        return [s.strip() for s in raw.split(",") if s.strip()]
-
-    return []
+# 기존 함수 (전체 트렌드)
+def get_weekly_tech_trends(db: Session, weeks: int = 8):
+    frontend = get_tech_trends_by_category(db, "frontend", weeks)
+    backend = get_tech_trends_by_category(db, "backend", weeks)
+    
+    total_counter = Counter()
+    for item in frontend + backend:
+        total_counter[item['skill']] += item['count']
+        
+    return [{"skill": k, "count": v} for k, v in total_counter.most_common(10)]
 
 
-###########################################
-# 🎯 사용자 맞춤 채용 추천
-###########################################
+# ... (나머지 get_recommended_jobs, save_job_posting 등 기존 함수 유지)
 def get_recommended_jobs(db: Session, skills: list, limit: int = 20):
-    if not skills:
-        return (
-            db.query(CareerJob)
-            .order_by(CareerJob.posted_date.desc())
-            .limit(limit)
-            .all()
-        )
-
     query = db.query(CareerJob)
-    filters = []
+    if skills:
+        filters = [CareerJob.title.ilike(f"%{skill}%") for skill in skills]
+        filters.extend([CareerJob.tags.ilike(f"%{skill}%") for skill in skills])
+        query = query.filter(or_(*filters))
+    return query.order_by(CareerJob.posted_date.desc()).limit(limit).all()
 
-    for skill in skills:
-        if skill:
-            filters.append(CareerJob.title.ilike(f"%{skill}%"))
-
-    if filters:
-        query = query.filter(*filters)
-
-    return (
-        query.order_by(CareerJob.posted_date.desc())
-        .limit(limit)
-        .all()
-    )
-
-
-###########################################
-# 💾 CareerJob 단일 저장
-###########################################
 def save_job_posting(db: Session, job_data: dict):
     url = job_data.get("url")
-    if not url:
-        return False
-
-    # 중복 체크
-    exists = (
-        db.query(CareerJob)
-        .filter(CareerJob.url == url)
-        .first()
-    )
-    if exists:
-        return False
+    if not url: return False
+    if db.query(CareerJob).filter(CareerJob.url == url).first(): return False
 
     title = job_data.get("title")
     norm_tags = normalize_tags(job_data.get("tags"), title=title)
 
     job = CareerJob(
-        title=title,
-        company=job_data.get("company"),
-        location=job_data.get("location"),
-        job_type=job_data.get("job_type"),
-        url=url,
-        tags=norm_tags,
+        title=title, company=job_data.get("company"), location=job_data.get("location"),
+        job_type=job_data.get("job_type"), url=url, tags=norm_tags,
         source=job_data.get("source", "Unknown"),
         posted_date=parse_posted_date(job_data.get("posted_date")),
         created_at=datetime.utcnow(),
     )
+    db.add(job)
+    db.commit()
+    return True
 
-    try:
-        db.add(job)
-        db.commit()
-        return True
-    except Exception as e:
-        print("❌ CareerJob Insert Error:", e)
-        db.rollback()
-        return False
-
-
-###########################################
-# 💾 리스트 일괄 저장
-###########################################
 def save_crawled_jobs(results: List[dict]):
     db = SessionLocal()
     saved = 0
-
     for job in results:
-        if save_job_posting(db, job):
-            saved += 1
-
+        try:
+            if save_job_posting(db, job): saved += 1
+        except Exception: db.rollback()
     db.close()
-    print(f"💾 CareerJob 저장 완료: {saved}개 / 총 {len(results)}개")
+    print(f"💾 [Career] Saved {saved}/{len(results)} jobs.")
 
-
-###########################################
-# 🔥 NEWS 스타일 Career Pipeline (단일 파일 방식)
-###########################################
 def run_career_pipeline():
     print("\n🔥 CAREER PIPELINE START")
-
-    # 1) JobKorea
-    try:
-        from services.jobkorea_scraper import crawl_jobkorea
-        jk = crawl_jobkorea()
-        print(f"📌 JobKorea 확보: {len(jk)}개")
-    except Exception as e:
-        print(f"❌ JobKorea 크롤링 오류:", e)
-        jk = []
-
-    # 2) Saramin
-    try:
-        from services.saramin_scraper import crawl_saramin
-        sm = crawl_saramin()
-        print(f"📌 Saramin 확보: {len(sm)}개")
-    except Exception as e:
-        print(f"❌ Saramin 크롤링 오류:", e)
-        sm = []
-
-    # 3) 저장
-    all_jobs = jk + sm
-    save_crawled_jobs(all_jobs)
-
-    print(f"💾 CareerJob 저장 완료: {len(all_jobs)}개 크롤링됨")
+    for keyword in CORE_KEYWORDS:
+        try:
+            results = crawl_career_all(keyword, limit_per_site=20)
+            save_crawled_jobs(results)
+        except Exception as e: print(f"❌ Pipeline Error ({keyword}): {e}")
     print("🔥 CAREER PIPELINE END\n")
 
-###########################################
-# ⭐ 신규: 채용 공고 페이징
-###########################################
 def get_jobs_paged(db: Session, page: int, size: int):
-    """
-    채용 공고 페이징 함수
-    /api/career/jobs?page=1&size=6에서 사용됨
-    """
-
     total = db.query(CareerJob).count()
-
-    jobs = (
-        db.query(CareerJob)
-        .order_by(CareerJob.posted_date.desc())
-        .offset((page - 1) * size)
-        .limit(size)
-        .all()
-    )
-
-    return {
-        "page": page,
-        "size": size,
-        "total": total,
-        "total_pages": (total + size - 1) // size,
-        "jobs": jobs,
-    }
+    jobs = db.query(CareerJob).order_by(CareerJob.posted_date.desc()).offset((page - 1) * size).limit(size).all()
+    return {"page": page, "size": size, "total": total, "total_pages": (total + size - 1) // size, "jobs": jobs}

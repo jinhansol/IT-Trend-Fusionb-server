@@ -1,66 +1,81 @@
-# schemas/dev_schema.py
+# backend/schemas/dev_schema.py
 # flake8: noqa
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 
 # =======================================================
-# 🔹 공통 DevPost Response
+# 🔹 DevPost 공통 Response
 # =======================================================
 class DevPostResponse(BaseModel):
     id: int
-    source: str            # okky / devto
+    source: str
     source_id: str
     title: str
     url: str
-    author: Optional[str]
-    summary: Optional[str]
-    tags: List[str]
-    like_count: int
-    comment_count: int
-    view_count: int
-    published_at: Optional[datetime]
-    crawled_at: Optional[datetime]
+    author: Optional[str] = None
+    summary: Optional[str] = None
+    tags: List[str] = []
+    like_count: int = 0
+    comment_count: int = 0
+    view_count: int = 0
+    published_at: Optional[datetime] = None
+    crawled_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # =======================================================
-# 🔹 Public Feed Response
+# 🔹 Feed Section
 # =======================================================
-class PublicDevFeedResponse(BaseModel):
-    okky: List[DevPostResponse]
-    devto: List[DevPostResponse]
-    updated_at: datetime
+class FeedSection(BaseModel):
+    items: List[DevPostResponse] = []
+    total: int = 0
 
 
 # =======================================================
-# 🔹 Personal Feed Response
+# 🔹 통합 Feed Response (Public + Personal 모두 커버)
 # =======================================================
-class PersonalDevFeedResponse(BaseModel):
-    interests: List[str]
-    from_okky: List[DevPostResponse]
-    from_devto: List[DevPostResponse]
-    recommended: List[DevPostResponse]
-    updated_at: datetime
+class DevFeedResponse(BaseModel):
+    # 공통 필드 (Public)
+    okky: Optional[FeedSection] = None
+    devto: Optional[FeedSection] = None
+    
+    # 개인화 필드 (Personal)
+    interests: List[str] = []
+    from_okky: List[DevPostResponse] = []
+    from_devto: List[DevPostResponse] = []
+    recommended: List[DevPostResponse] = []
+    
+    updated_at: Optional[datetime] = None
 
 
 # =======================================================
-# 🔹 Source별 Feed Response
+# 🔹 기타 Response들
 # =======================================================
 class SourceFeedResponse(BaseModel):
-    source: str                # okky / devto
+    source: str
     total: int
     items: List[DevPostResponse]
 
-
-# =======================================================
-# 🔹 Tag Search Response
-# =======================================================
 class TagSearchResponse(BaseModel):
     tag: str
     items: List[DevPostResponse]
     total: int
+
+class TopicInsightItem(BaseModel):
+    topic: str
+    count: int
+
+class TopicInsightResponse(BaseModel):
+    clusters: List[TopicInsightItem]
+
+class IssueInsightItem(BaseModel):
+    category: str
+    count: int
+
+class IssueInsightResponse(BaseModel):
+    issues: Dict[str, int]

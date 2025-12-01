@@ -1,14 +1,15 @@
-// src/components/JobCard.jsx
 import React from "react";
 
 export default function JobCard({ job }) {
   return (
     <div className="bg-white rounded-xl border p-4 shadow-sm flex flex-col gap-2 hover:shadow-md transition">
+      {/* 상단 기본 정보 */}
       <div className="flex justify-between items-center">
         <div>
           <h3 className="font-semibold">{job.company}</h3>
           <p className="text-sm text-gray-600">{job.title}</p>
         </div>
+
         <a
           href={job.url}
           target="_blank"
@@ -19,9 +20,12 @@ export default function JobCard({ job }) {
         </a>
       </div>
 
-      <p className="text-gray-500 text-sm">{job.info}</p>
+      {/* 위치 정보 */}
+      {job.location && (
+        <p className="text-sm text-gray-500">{job.location}</p>
+      )}
 
-      {/* 태그가 있을 경우만 표시 */}
+      {/* 태그 */}
       {Array.isArray(job.tags) && job.tags.length > 0 && (
         <div className="flex gap-2 flex-wrap mt-2">
           {job.tags.map((tag, idx) => (
@@ -35,8 +39,12 @@ export default function JobCard({ job }) {
         </div>
       )}
 
-      {/* 설명이 있으면 표시 */}
-      {job.desc && <p className="text-sm text-gray-700 mt-2">{job.desc}</p>}
+      {/* 날짜 */}
+      {job.posted_date && (
+        <p className="text-xs text-gray-400 mt-1">
+          등록일: {new Date(job.posted_date).toLocaleDateString("ko-KR")}
+        </p>
+      )}
     </div>
   );
 }

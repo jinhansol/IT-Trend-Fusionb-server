@@ -41,11 +41,12 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 
 
 # ---------------------------------------------------------
-# 🔐 필수 로그인 버전
+# 🔐 필수 로그인 버전 (401 발생)
 # ---------------------------------------------------------
 def get_current_user(token: str = Depends(oauth2_scheme)):
     """
-    로그인 필수 API에서 사용
+    필수 로그인 요구 API에서만 사용.
+    Authorization 헤더가 없거나 토큰이 잘못되면 즉시 401 발생.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -55,7 +56,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
+        email = payload.get("sub")
         if not email:
             raise credentials_exception
     except JWTError:
@@ -72,36 +73,47 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 
 
 # ---------------------------------------------------------
-# 🔓 Optional 로그인 (토큰 없어도 허용)
+# 🔓 Optional 로그인 (fallback)
 # ---------------------------------------------------------
 def get_current_user_optional(request: Request):
     """
-    - 로그인 O → User 반환
-    - 로그인 X → None
+    - Authorization 헤더 없음     → None
+    - Bearer 포맷 아님            → None
+    - Token 비어있음              → None
+    - Token 만료/손상            → None
+    - User 없으면                → None
     """
-    auth_header = request.headers.get("Authorization")
 
+    # 1) Authorization 헤더 없으면 public
+    auth_header = request.headers.get("Authorization")
     if not auth_header:
         return None
 
-    # "Bearer xxxxxx"
+    # 2) Bearer 포맷 검사
     if not auth_header.startswith("Bearer "):
         return None
 
+    # 3) Token 추출
     token = auth_header.split(" ")[1].strip()
     if not token:
         return None
 
+    # 4) JWT decode 시도
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload.get("sub")
         if not email:
             return None
-    except:
+    except JWTError:
+        # ✔️ decode 실패 → 만료 / invalid → None 반환
         return None
 
+    # 5) DB 조회
     db = SessionLocal()
     user = db.query(UserProfile).filter(UserProfile.email == email).first()
     db.close()
+
+    if not user:
+        return None
 
     return user
