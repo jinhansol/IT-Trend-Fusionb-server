@@ -18,7 +18,7 @@ from routers import (
     roadmap_router,    # /api/roadmap
     ai_router,         # /api/ai
     quest_router,      # /api/quest
-    career_router,     # ⭐ 다시 활성화
+    # career_router,     # ⭐ 다시 활성화
     quiz_router,
 )
 
