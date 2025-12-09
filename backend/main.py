@@ -9,97 +9,107 @@ from dotenv import load_dotenv
 # DB 초기화
 from database.models import init_db
 
-# 🔥 Routers (리팩토링 완료된 통합 라우터들)
+# Routers
 from routers import (
-    home_router,      # (Home + News + Trend 통합)
-    career_router,    # (Career + Learning + JobKorea/Saramin 통합)
-    dev_router,       # (Dev + OKKY/Dev.to 통합)
-    user_router,      # (Auth + Interest + User 통합)
-    protected_router, # (JWT 테스트용 유지)
+    home_router,       # /api/home
+    dev_router,        # /api/dev
+    user_router,       # /api/auth, /api/user
+    protected_router,  # /api/protected
+    roadmap_router,    # /api/roadmap
+    ai_router,         # /api/ai
+    quest_router,      # /api/quest
+    career_router,     # ⭐ 다시 활성화
+    quiz_router,
 )
 
-# 스케줄러 & 뉴스 파이프라인
+# Scheduler (news)
 from scheduler import start_scheduler
-# ✅ 변경: news_service가 home_service로 통합됨
-from services.home_service import run_news_pipeline
 
 
-# ---------------------------------------------------------
-# 🔧 환경 변수 로드
-# ---------------------------------------------------------
+# --------------------------------------------------------------
+# 🔧 Load Environment
+# --------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 load_dotenv(dotenv_path=ENV_PATH)
-# print("🔍 DEBUG GITHUB_TOKEN:", os.getenv("GITHUB_TOKEN")) # 디버그용 로그는 주석 처리 권장
 
 
-# ---------------------------------------------------------
-# 🚀 FastAPI 초기화
-# ---------------------------------------------------------
-app = FastAPI(title="IT Trend Hub v3 🚀")
+# --------------------------------------------------------------
+# 🚀 FastAPI Initialization
+# --------------------------------------------------------------
+app = FastAPI(
+    title="DevHub API v4 (Gamified + Career Enabled) 🚀",
+    version="4.0.1",
+)
 
 
-# ---------------------------------------------------------
-# 🌐 CORS 설정
-# ---------------------------------------------------------
+# --------------------------------------------------------------
+# 🌐 CORS
+# --------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # 배포 시에는 구체적인 도메인으로 변경 권장
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
 
-# ---------------------------------------------------------
-# 💾 DB 초기화 + Router 등록
-# ---------------------------------------------------------
+# --------------------------------------------------------------
+# 💾 Init DB + Register Routers
+# --------------------------------------------------------------
 init_db()
 
-# 1️⃣ User & Auth (Prefix: /api)
-# 내부 라우터에 /auth, /interests 등의 경로가 정의되어 있으므로 /api만 붙임
-# 최종 경로 예시: /api/auth/login, /api/interests/save
+# 1️⃣ User
 app.include_router(user_router.router, prefix="/api")
 
-# 2️⃣ Domain Routers (각 라우터 내부에 prefix=/api/... 설정됨)
-app.include_router(home_router.router)    # /api/home
-app.include_router(career_router.router)  # /api/career
-app.include_router(dev_router.router)     # /api/dev
+# 2️⃣ Home (News + Trend)
+app.include_router(home_router.router)
 
-# 3️⃣ Protected (Test용)
-app.include_router(protected_router.router)
+# 3️⃣ Dev Community
+app.include_router(dev_router.router)
+
+# ⭐ 4️⃣ Career (Reactivate)
+# 챗GPT가 로직 수정할 필요 없이 당장 동작 가능 상태로 유지
+# app.include_router(career_router.router, prefix="/api/career")
+
+# 5️⃣ Roadmap
+app.include_router(roadmap_router.router)
+
+# 6️⃣ Today Quests
+app.include_router(quest_router.router)
+
+# 7️⃣ AI
+app.include_router(ai_router.router, prefix="/api/ai")
+
+# 8️⃣ Protected
+app.include_router(protected_router.router, prefix="/api")
+
+app.include_router(quiz_router.router, prefix="/api/quiz", tags=["Quiz"])
 
 
-# ---------------------------------------------------------
-# 🕒 스케줄러 (뉴스 파이프라인 전용)
-# ---------------------------------------------------------
+# --------------------------------------------------------------
+# 🕒 Scheduler
+# --------------------------------------------------------------
 RUN_MAIN_FLAG = os.environ.get("RUN_MAIN", "false")
 
 @app.on_event("startup")
 def startup_event():
-    """
-    uvicorn --reload 실행 시 두 번 실행되는 문제 회피용
-    """
     if RUN_MAIN_FLAG == "true":
-        print("⚠️ Reload 프로세스 → 스케줄러 실행 안 함")
+        print("⚠️ Reload Process → Scheduler Skipped")
         return
 
-    print("🟢 Main 프로세스 → 스케줄러 실행")
+    print("🟢 Starting Scheduler...")
     start_scheduler()
 
 
-# ---------------------------------------------------------
-# 🧪 Root 엔드포인트
-# ---------------------------------------------------------
+# --------------------------------------------------------------
+# Root and Health Check
+# --------------------------------------------------------------
 @app.get("/")
 def root():
-    return {"message": "IT Trend Hub v3 Backend Running 🚀"}
+    return {"message": "DevHub v4 Backend Running (Gamified + Career) 🚀"}
 
-
-# ---------------------------------------------------------
-# ⭐ cron 직접 호출용 엔드포인트 (뉴스 파이프라인 테스트용)
-# ---------------------------------------------------------
-@app.get("/cron/news")
-def cron_news():
-    run_news_pipeline()
-    return {"message": "News Pipeline executed successfully"}
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}

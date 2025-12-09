@@ -9,7 +9,7 @@ import threading
 
 # ✅ 변경: 통합된 서비스에서 함수 가져오기
 from services.home_service import run_news_pipeline  # News + Trend 통합됨
-from services.career_service import run_career_pipeline
+# from services.career_service import run_career_pipeline
 from services.dev_service import save_posts
 from services.dev_scraper import crawl_okky, crawl_devto # ✅ 함수명 변경 반영
 
@@ -33,12 +33,12 @@ def auto_update_news():
 # -------------------------------------------------------------
 # 🔄 Career 자동 업데이트
 # -------------------------------------------------------------
-def auto_update_career():
-    print("🕒 [스케줄러] Career 자동 업데이트 실행")
-    try:
-        run_career_pipeline()
-    except Exception as e:
-        print("❌ Career 업데이트 오류:", e)
+# def auto_update_career():
+#     print("🕒 [스케줄러] Career 자동 업데이트 실행")
+#     try:
+#         run_career_pipeline()
+#     except Exception as e:
+#         print("❌ Career 업데이트 오류:", e)
 
 
 # -------------------------------------------------------------
@@ -80,12 +80,12 @@ def start_scheduler():
         id="news-cron",
     )
 
-    # 💼 Career: 4시간 간격
-    scheduler.add_job(
-        auto_update_career,
-        CronTrigger(hour="0,4,8,12,16,20", minute=10),
-        id="career-cron",
-    )
+    # # 💼 Career: 4시간 간격
+    # scheduler.add_job(
+    #     auto_update_career,
+    #     CronTrigger(hour="0,4,8,12,16,20", minute=10),
+    #     id="career-cron",
+    # )
 
     # 💬 DevFeed: 2시간 간격
     scheduler.add_job(
@@ -102,8 +102,8 @@ def start_scheduler():
     print("🚀 서버 시작 → 뉴스 즉시 실행")
     threading.Thread(target=auto_update_news, daemon=True).start()
 
-    print("🚀 서버 시작 → Career 즉시 실행")
-    threading.Thread(target=auto_update_career, daemon=True).start()
+    # print("🚀 서버 시작 → Career 즉시 실행")
+    # threading.Thread(target=auto_update_career, daemon=True).start()
 
     print("🚀 서버 시작 → DevFeed 즉시 실행")
     threading.Thread(target=auto_update_dev, daemon=True).start()

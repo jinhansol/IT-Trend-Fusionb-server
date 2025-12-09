@@ -1,204 +1,125 @@
-# backend/services/career_scraper.py
+# # backend/services/career_scraper.py
 
-import time
-import random
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from bs4 import BeautifulSoup
+# import os
+# import requests
+# import xml.etree.ElementTree as ET
+# from dotenv import load_dotenv
+# import random
+# from datetime import datetime, timedelta
 
-# ==========================================================
-# 🛡️ Anti-Detect Selenium Driver (공통 사용)
-# ==========================================================
-def create_driver():
-    options = Options()
-    options.add_argument("--headless=new") # 최신 헤드리스 모드
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
+# load_dotenv()
+
+# WORKNET_AUTH_KEY = os.getenv("WORKNET_API_KEY")
+# API_URL = "http://openapi.work.go.kr/opi/opi/opia/wantedApi.do"
+
+# def get_mock_jobs(keyword):
+#     """
+#     🚧 [개발용] API 승인 대기 중에 사용할 가짜(Mock) 데이터 생성기
+#     """
+#     print(f"⚠️ [Mock Mode] '{keyword}'에 대한 가짜 데이터를 생성합니다.")
     
-    # 봇 탐지 우회 옵션 (잡코리아/사람인 공통 적용)
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    )
-
-    driver = webdriver.Chrome(options=options)
-
-    # navigator.webdriver = undefined로 조작 (매우 중요)
-    driver.execute_cdp_cmd(
-        "Page.addScriptToEvaluateOnNewDocument",
-        {
-            "source": """
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-            """
-        },
-    )
-    return driver
-
-
-# ==========================================================
-# 🟢 잡코리아 (JobKorea)
-# ==========================================================
-def scrape_jobkorea(keyword, limit=20):
-    print(f"🚀 [JobKorea] Searching: {keyword}...")
-    driver = create_driver()
-    results = []
+#     mock_data = []
+#     # 그럴싸한 가짜 데이터 목록
+#     titles = [
+#         f"{keyword} 백엔드 개발자 채용 (신입/경력)", 
+#         f"[판교] {keyword} 기반 대용량 트래픽 처리 담당자",
+#         f"AI 솔루션 {keyword} 엔지니어 모집",
+#         f"금융권 {keyword} 서버 개발자 (여의도)",
+#         f"유니콘 스타트업 {keyword} 풀스택 개발자"
+#     ]
+#     companies = ["네카라쿠배", "당토직야", "몰두센", "우아한형제들", "비바리퍼블리카"]
+#     locations = ["서울 강남구", "경기 성남시", "서울 영등포구", "재택근무", "서울 송파구"]
     
-    try:
-        url = f"https://www.jobkorea.co.kr/Search/?stext={keyword}&IsInLinkAction=False"
-        driver.get(url)
-        time.sleep(random.uniform(2, 3)) # 랜덤 대기
+#     for i in range(5):
+#         mock_data.append({
+#             "title": titles[i],
+#             "company": companies[i],
+#             "url": "https://www.work.go.kr", # 클릭 시 이동할 가짜 링크
+#             "location": locations[i],
+#             "job_type": "연봉 4,000만원 이상",
+#             "close_date": (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d"),
+#             "source": "Worknet (Mock)" # 가짜임을 표시 (프론트에서 배지 표시용)
+#         })
+#     return mock_data
 
-        # 무한 스크롤 (데이터 확보)
-        last_height = driver.execute_script("return document.body.scrollHeight")
-        for _ in range(3): # 너무 많이하면 느려지므로 3~5회 적당
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(1.5)
-            new_height = driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:
-                break
-            last_height = new_height
+# def parse_worknet_xml(xml_string):
+#     """
+#     워크넷 XML 응답을 파싱하여 딕셔너리 리스트로 변환
+#     """
+#     try:
+#         root = ET.fromstring(xml_string)
+#     except ET.ParseError:
+#         return []
 
-        # BS4로 파싱 (Selenium보다 빠르고 안정적)
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        
-        # 최신 DOM 구조 반영
-        cards = soup.select("div[data-sentry-component='CardJob']")
-        
-        for card in cards[:limit]:
-            try:
-                title_el = card.select_one("span[class*='Typography_variant_size18']")
-                company_el = card.select_one("span[class*='Typography_variant_size16']")
-                link_el = card.select_one("a[href*='/Recruit/']")
-                
-                if not title_el or not link_el:
-                    continue
+#     jobs = []
+#     # <wanted> 태그가 채용공고 하나입니다.
+#     for wanted in root.findall(".//wanted"):
+#         try:
+#             title = wanted.find("title").text or ""
+#             company = wanted.find("businoNm").text or "Unknown"
+#             url = wanted.find("wantedInfoUrl").text or ""
+#             salary = wanted.find("salTpNm").text or ""
+#             region = wanted.find("region").text or ""
+#             close_date = wanted.find("closeDt").text or ""
+            
+#             job = {
+#                 "title": title,
+#                 "company": company,
+#                 "url": url,
+#                 "location": region,
+#                 "job_type": salary,   
+#                 "close_date": close_date,
+#                 "source": "Worknet"
+#             }
+#             jobs.append(job)
+#         except AttributeError:
+#             continue
+            
+#     return jobs
 
-                title = title_el.get_text(strip=True)
-                company = company_el.get_text(strip=True) if company_el else "Unknown"
-                link = "https://www.jobkorea.co.kr" + link_el["href"] if link_el["href"].startswith("/") else link_el["href"]
-                
-                # 지역 추출
-                location = "서울" # 기본값
-                spans = card.select("span")
-                for sp in spans:
-                    text = sp.get_text(strip=True)
-                    if any(x in text for x in ["서울", "경기", "인천", "구", "시"]):
-                        location = text
-                        break
+# def crawl_career_all(keyword="파이썬", limit_per_site=20):
+#     """
+#     워크넷 API를 호출하되, 실패 시 Mock 데이터를 반환합니다.
+#     """
+#     # 1. 키가 없으면 바로 Mock 리턴
+#     if not WORKNET_AUTH_KEY:
+#         print("❌ .env에 WORKNET_API_KEY가 없습니다. (Mock 사용)")
+#         return get_mock_jobs(keyword)
 
-                results.append({
-                    "source": "JobKorea",
-                    "title": title,
-                    "company": company,
-                    "url": link,
-                    "location": location,
-                    "info": location  # 통일된 포맷
-                })
-            except Exception:
-                continue
+#     params = {
+#         "authKey": WORKNET_AUTH_KEY,
+#         "callTp": "L",       # List
+#         "returnType": "XML",
+#         "startPage": 1,
+#         "display": limit_per_site,
+#         "keyword": keyword,
+#         "occupation": "024"  # IT 직종
+#     }
 
-    except Exception as e:
-        print(f"❌ [JobKorea] Error: {e}")
-    finally:
-        driver.quit()
+#     print(f"📡 [Worknet] API 요청: {keyword}")
     
-    print(f"✅ [JobKorea] Found {len(results)} jobs.")
-    return results
-
-
-# ==========================================================
-# 🔵 사람인 (Saramin)
-# ==========================================================
-def scrape_saramin(keyword, limit=20):
-    print(f"🚀 [Saramin] Searching: {keyword}...")
-    driver = create_driver()
-    results = []
-
-    try:
-        url = f"https://www.saramin.co.kr/zf_user/search?searchword={keyword}"
-        driver.get(url)
-        time.sleep(random.uniform(2, 3))
-
-        # 스크롤
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(1.5)
-
-        soup = BeautifulSoup(driver.page_source, "html.parser")
+#     try:
+#         res = requests.get(API_URL, params=params, timeout=5)
         
-        job_cards = soup.select("div.item_recruit")
-        
-        for job in job_cards[:limit]:
-            try:
-                title_tag = job.select_one("h2.job_tit > a")
-                company_tag = job.select_one("strong.corp_name > a")
-                condition_tag = job.select_one("div.job_condition")
+#         if res.status_code == 200:
+#             # 2. 에러 메시지 체크 (권한 없음 002 에러 등)
+#             if "<error>" in res.text or "<message>" in res.text:
+#                 print(f"🚨 API 권한 대기 중 (002 Error). Mock 데이터를 사용합니다.")
+#                 return get_mock_jobs(keyword)
 
-                if not title_tag:
-                    continue
+#             jobs = parse_worknet_xml(res.text)
+            
+#             # 3. 데이터가 0건이어도 개발을 위해 Mock 리턴
+#             if not jobs:
+#                 print(f"ℹ️ 검색 결과가 없어 Mock 데이터를 반환합니다.")
+#                 return get_mock_jobs(keyword)
 
-                title = title_tag.get_text(strip=True)
-                company = company_tag.get_text(strip=True) if company_tag else "Unknown"
-                link = "https://www.saramin.co.kr" + title_tag["href"]
-                
-                info_list = [span.get_text(strip=True) for span in condition_tag.select("span")] if condition_tag else []
-                info_str = " · ".join(info_list)
-                
-                # 지역은 info_list의 첫 번째 요소인 경우가 많음
-                location = info_list[0] if info_list else "지역 정보 없음"
-
-                results.append({
-                    "source": "Saramin",
-                    "title": title,
-                    "company": company,
-                    "url": link,
-                    "location": location,
-                    "info": info_str
-                })
-            except Exception:
-                continue
-
-    except Exception as e:
-        print(f"❌ [Saramin] Error: {e}")
-    finally:
-        driver.quit()
-
-    print(f"✅ [Saramin] Found {len(results)} jobs.")
-    return results
-
-
-# ==========================================================
-# ⚡ 통합 실행 (병렬 처리)
-# ==========================================================
-def crawl_career_all(keyword="Python", limit_per_site=20):
-    """
-    JobKorea와 Saramin을 동시에 크롤링하여 결과를 합칩니다.
-    """
-    print("🔥 [Career Scraper] Starting Parallel Crawling...")
-    
-    total_results = []
-    
-    # ThreadPoolExecutor를 사용하여 두 브라우저를 동시에 띄움 (시간 절약)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        future_jk = executor.submit(scrape_jobkorea, keyword, limit_per_site)
-        future_sr = executor.submit(scrape_saramin, keyword, limit_per_site)
-        
-        for future in as_completed([future_jk, future_sr]):
-            try:
-                data = future.result()
-                if data:
-                    total_results.extend(data)
-            except Exception as e:
-                print(f"⚠️ Worker Error: {e}")
-
-    # 결과를 랜덤하게 섞거나, 최신순 정렬 등을 할 수 있음 (여기선 그냥 반환)
-    print(f"🎉 [Career Scraper] Total {len(total_results)} jobs collected.")
-    return total_results
+#             print(f"✅ [Worknet] '{keyword}' 관련 {len(jobs)}건 수집 완료")
+#             return jobs
+#         else:
+#             print(f"❌ API Error: {res.status_code}")
+#             return get_mock_jobs(keyword)
+            
+#     except Exception as e:
+#         print(f"❌ Connection Error: {e}")
+#         return get_mock_jobs(keyword)
