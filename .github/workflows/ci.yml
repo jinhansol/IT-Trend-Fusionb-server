@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, tests, migrations)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      TEST_DATABASE_URL: mysql+pymysql://devhub_test:devhub_local_test@127.0.0.1:3307/devhub_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Start MariaDB (same compose file as local development)
+        working-directory: .
+        run: docker compose up -d --wait mariadb
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.11.32"
+          working-directory: backend
+
+      - name: Install dependencies (locked)
+        run: uv sync --locked
+
+      - name: Lint
+        run: |
+          uv run ruff check
+          uv run ruff format --check
+
+      - name: Tests (unit + MariaDB integration)
+        run: uv run pytest
+
+      - name: Alembic CLI on the dev database
+        env:
+          APP_ENV: local
+          DATABASE_URL: mysql+pymysql://devhub_dev:devhub_local_dev@127.0.0.1:3307/devhub_dev
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      - name: MariaDB logs on failure
+        if: failure()
+        working-directory: .
+        run: docker compose logs mariadb
+
+  frontend:
+    name: Frontend (lint new code, build)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # The legacy screens still have known lint errors; only DevHub 2.0 files are enforced.
+      - name: Lint DevHub 2.0 files
+        run: npx eslint src/api/client.js vite.config.js
+
+      - name: Lint everything (report only)
+        continue-on-error: true
+        run: npm run lint
+
+      - run: npm run build
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
