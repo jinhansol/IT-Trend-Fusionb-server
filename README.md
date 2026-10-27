@@ -7,6 +7,65 @@
 
 ---
 
+## 🚧 DevHub 2.0 개발 환경 (진행 중)
+
+DevHub 2.0은 새 백엔드(`backend/app/`)와 새 MariaDB 스키마로 재구축 중입니다. 학교 파이널 프로젝트의 마지막 상태는 `legacy-final-project` 태그로 보존합니다. 아래 소개(1장 이후)는 기존 버전 기준입니다.
+
+| 구분 | 버전 |
+| :--- | :--- |
+| Python | 3.12 (`backend/.python-version`), 의존성 관리: [uv](https://docs.astral.sh/uv/) |
+| Node.js | 24 LTS (`.nvmrc`) |
+| MariaDB | 11.4.13 LTS (Docker Compose) |
+
+### 1) MariaDB 실행
+
+```bash
+docker compose up -d --wait mariadb
+```
+
+- `127.0.0.1:3307`에 개발 DB `devhub_dev`와 테스트 DB `devhub_test`가 계정이 분리된 상태로 생성됩니다. 테스트 계정은 개발 DB에 접근할 수 없습니다.
+- 초기화 스크립트(`docker/mariadb/init/`)는 데이터 볼륨이 처음 만들어질 때 한 번만 실행됩니다.
+- 기본 비밀번호는 로컬 전용입니다. 바꾸려면 루트의 `.env.example`을 `.env`로 복사해 수정하세요.
+- `docker compose down -v`는 로컬 DB 데이터를 삭제하므로 주의하세요.
+
+### 2) 백엔드
+
+```bash
+cd backend
+cp .env.example .env          # 이미 .env가 있다면 DATABASE_URL, TEST_DATABASE_URL 줄만 추가
+uv sync
+uv run alembic upgrade head   # 스키마는 Alembic으로만 관리합니다
+uv run uvicorn app.main:create_app --factory --reload
+```
+
+- 헬스체크: `GET http://127.0.0.1:8000/api/health` (프로세스), `GET /api/health/ready` (DB 연결)
+- API 문서(로컬만): `http://127.0.0.1:8000/api/docs`
+- 기존 백엔드(`backend/main.py`)는 별도 실행 경로이며 새 앱과 섞이지 않습니다.
+
+### 3) 테스트
+
+```bash
+cd backend
+uv run pytest                        # 단위 + MariaDB 통합 테스트 (TEST_DATABASE_URL 필요)
+uv run pytest -m "not integration"   # DB 없이 단위 테스트만
+uv run ruff check && uv run ruff format --check
+```
+
+통합 테스트는 실제 연결된 DB 이름이 `*_test`인지 확인한 뒤에만 실행되며, `TEST_DATABASE_URL`이 없으면 건너뛰지 않고 실패합니다.
+
+### 4) 프론트엔드
+
+```bash
+cd frontend
+npm ci
+npm run dev       # /api 요청은 Vite proxy로 새 백엔드(127.0.0.1:8000)에 전달
+npm run build
+```
+
+새 API 호출은 `src/api/client.js`를 사용합니다. 기존 화면의 API 모듈은 도메인별로 순차 전환합니다.
+
+---
+
 ## 1. 📅 프로젝트 개요 (Overview)
 
 | 항목 | 내용 |
