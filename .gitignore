@@ -39,3 +39,7 @@ coverage/
 # 기타 불필요
 .idea/
 *.sqlite3
+
+# DevHub 2.0: example env files are documentation and must be committed
+!.env.example
+!**/.env.example
