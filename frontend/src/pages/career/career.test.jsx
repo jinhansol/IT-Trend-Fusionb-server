@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
+import { AuthContext } from "../../auth/AuthContext";
 import { installFakeServer } from "../../test/fakeServer";
 import CareerHomePage from "./CareerHomePage";
 import TrackPage from "./TrackPage";
@@ -45,15 +46,19 @@ afterEach(() => {
   restore?.();
 });
 
-function renderAt(path) {
+const ANONYMOUS = { status: "anonymous", user: null };
+
+function renderAt(path, auth = ANONYMOUS) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/career" element={<CareerHomePage />} />
-        <Route path="/career/:trackSlug" element={<TrackPage />} />
-        <Route path="/career/:trackSlug/:unitSlug" element={<UnitPage />} />
-      </Routes>
-    </MemoryRouter>
+    <AuthContext.Provider value={auth}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/career" element={<CareerHomePage />} />
+          <Route path="/career/:trackSlug" element={<TrackPage />} />
+          <Route path="/career/:trackSlug/:unitSlug" element={<UnitPage />} />
+        </Routes>
+      </MemoryRouter>
+    </AuthContext.Provider>
   );
 }
 
