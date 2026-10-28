@@ -51,6 +51,8 @@ jobs:
         run: |
           uv run alembic upgrade head
           for track in content/*/; do uv run python -m app.content_loader load "$track" --dry-run; done
+          uv run python -m app.content_loader technologies content/technologies.yaml --dry-run
+          uv run python -m app.content_loader sources content/sources.yaml --dry-run
 
       - name: Alembic CLI on the dev database
         env:
@@ -88,8 +90,9 @@ jobs:
       - name: Lint DevHub 2.0 files
         run: >-
           npx eslint vite.config.js src/main.jsx src/api/client.js src/api/client.test.js
-          src/api/auth.js src/api/learning.js src/api/progress.js src/auth src/hooks src/test
-          src/components/learn src/pages/career src/router/AppRouter.jsx
+          src/api/auth.js src/api/learning.js src/api/progress.js src/api/content.js src/auth src/hooks
+          src/test src/utils src/components/learn src/components/feed src/pages/career src/pages/home
+          src/pages/dev src/pages/feed.test.jsx src/router/AppRouter.jsx
           src/components/common/HeaderNav.jsx src/modals/LoginPopup.jsx src/modals/SignupPopup.jsx
 
       - name: Unit tests (Vitest)

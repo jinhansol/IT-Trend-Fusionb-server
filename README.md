@@ -65,6 +65,27 @@ uv run python -m app.content_loader load content/python             # DB에 반�
 - 퀴즈 재도전은 무제한이며, 통과 전에는 점수와 틀린 문항 번호만, 통과 후에는 정답과 해설을 보여줍니다. 채점은 서버에서 하고 정답은 공개 API에 포함되지 않습니다.
 - 개인 진행 API는 `/api/me/...` 아래에 있고 로그인한 사용자 자신의 기록만 다룹니다.
 
+### Home·Dev 콘텐츠 수집
+
+Home(IT 뉴스)과 Dev(개발자 글·질문)는 수집 작업이 DB에 저장한 내용을 보여 줍니다. 웹 서버는 외부 사이트를 호출하지 않고, 수집은 별도 명령으로만 실행합니다.
+
+```bash
+cd backend
+uv run python -m app.content_loader technologies content/technologies.yaml   # 기술 분류
+uv run python -m app.content_loader sources content/sources.yaml             # 수집 소스
+uv run python -m app.jobs collect --dry-run          # 가져오기만 해 보고 저장하지 않음
+uv run python -m app.jobs collect                    # 모든 활성 소스 수집
+uv run python -m app.jobs collect --source devto     # 특정 소스만
+```
+
+- 소스: IT 뉴스 RSS, DEV Community·Hacker News·Stack Overflow(공식 API), GeekNews·국내 기업 기술블로그(RSS). 크롤링·브라우저 자동화는 쓰지 않습니다.
+- 본문은 저장하지 않고 제목·짧은 설명·링크·작성자·날짜·소스가 주는 지표(반응·점수·댓글·조회)만 저장합니다. 지표가 없는 소스는 0이 아니라 "없음"으로 저장됩니다.
+- 같은 글은 다시 수집해도 한 번만 저장되고 지표만 갱신됩니다. 같은 소스를 동시에 두 번 실행하면 하나는 `skipped`로 기록됩니다.
+- 실행 결과는 `job_runs`에 남고, 화면의 "마지막 갱신"과 지연 표시는 여기서 계산합니다. 한 소스가 실패해도 다른 소스는 계속 수집됩니다.
+- 기술 태그는 `content/technologies.yaml`의 별칭으로 붙습니다(단어 단위 일치라 "java"가 "javascript"에 붙지 않음).
+- Stack Exchange 무료 키가 있으면 `STACKEXCHANGE_KEY`에 넣으세요(하루 호출 한도 300 → 10,000). 없어도 동작합니다.
+- 수집 전용 라이브러리는 `jobs` 의존성 그룹에 있습니다(웹 전용 설치: `uv sync --no-group jobs`).
+
 ### 3) 테스트
 
 ```bash
@@ -76,7 +97,7 @@ uv run ruff check && uv run ruff format --check
 
 통합 테스트는 실제 연결된 DB 이름이 `*_test`인지 확인한 뒤에만 실행되며, `TEST_DATABASE_URL`이 없으면 건너뛰지 않고 실패합니다.
 
-E2E 테스트(Playwright)는 실제 브라우저로 회원가입 → 단원 학습 → 퀴즈 재도전·통과 → XP 확인 → 새로고침·재로그인 흐름을 검사합니다. 테스트 DB(`devhub_test`)에 마이그레이션과 콘텐츠를 반영한 뒤 API(8100)와 Vite(5180)를 직접 띄웁니다. 백엔드 pytest와 동시에 실행하지 마세요.
+E2E 테스트(Playwright)는 실제 브라우저로 회원가입 → 단원 학습 → 퀴즈 재도전·통과 → XP 확인 → 새로고침·재로그인 흐름과 Home·Dev 화면을 검사합니다. 테스트 DB(`devhub_test`)에 마이그레이션과 콘텐츠, 저장된 샘플 응답으로 만든 Home·Dev 데이터(외부 사이트 접속 없음)를 반영한 뒤 API(8100)와 Vite(5180)를 직접 띄웁니다. 백엔드 pytest와 동시에 실행하지 마세요.
 
 ```bash
 cd frontend && npm ci && cd ../e2e
@@ -97,7 +118,7 @@ npm run build
 
 새 API 호출은 `src/api/client.js`를 사용합니다. 로그인 상태는 `src/auth/AuthProvider.jsx`가 관리하며, 토큰을 localStorage에 저장하지 않습니다. 브라우저는 반드시 Vite 개발 서버(`http://localhost:5173`)로 접속해야 refresh 쿠키가 같은 출처로 동작합니다.
 
-전환 기간 안내: 기존 화면(Home·Dev·Career)의 API 모듈은 아직 옛 백엔드 주소(`localhost:8000`)를 직접 호출합니다. 새 백엔드를 8000에서 실행하면 기존 화면은 데이터를 불러오지 못합니다. 옛 화면을 함께 확인하려면 새 백엔드를 다른 포트(예: `--port 8001`)로 띄우고 `frontend/.env.local`에 `VITE_DEV_API_PROXY_TARGET=http://127.0.0.1:8001`을 지정하세요. 옛 화면은 옛 DB의 사용자 기준이라 새 로그인과 연결되지 않습니다.
+Home·Dev·Career 화면은 모두 새 백엔드를 사용합니다. 옛 화면 파일(`pages/Home.jsx`, `pages/DevDashboard.jsx`, `pages/CareerDashboard.jsx`)과 옛 API 모듈은 더 이상 라우팅되지 않으며, 정리 단계에서 제거할 예정입니다.
 
 ---
 

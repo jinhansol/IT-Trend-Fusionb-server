@@ -28,4 +28,6 @@ export default function globalSetup() {
   }
   run(["alembic", "upgrade", "head"]);
   run(["python", "-m", "app.content_loader", "load", "content/python"]);
+  // Home/Dev content from stored sample responses (no external sites).
+  run(["python", "-m", "tests.e2e_seed"]);
 }
