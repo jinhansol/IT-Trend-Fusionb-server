@@ -44,6 +44,14 @@ jobs:
       - name: Tests (unit + MariaDB integration)
         run: uv run pytest
 
+      - name: Validate learning content files
+        env:
+          APP_ENV: local
+          DATABASE_URL: mysql+pymysql://devhub_dev:devhub_local_dev@127.0.0.1:3307/devhub_dev
+        run: |
+          uv run alembic upgrade head
+          for track in content/*/; do uv run python -m app.content_loader load "$track" --dry-run; done
+
       - name: Alembic CLI on the dev database
         env:
           APP_ENV: local
@@ -80,8 +88,9 @@ jobs:
       - name: Lint DevHub 2.0 files
         run: >-
           npx eslint vite.config.js src/main.jsx src/api/client.js src/api/client.test.js
-          src/api/auth.js src/auth src/components/common/HeaderNav.jsx
-          src/modals/LoginPopup.jsx src/modals/SignupPopup.jsx
+          src/api/auth.js src/api/learning.js src/auth src/hooks src/test
+          src/components/learn src/pages/career src/router/AppRouter.jsx
+          src/components/common/HeaderNav.jsx src/modals/LoginPopup.jsx src/modals/SignupPopup.jsx
 
       - name: Unit tests (Vitest)
         run: npm test

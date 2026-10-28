@@ -43,6 +43,20 @@ uv run uvicorn app.main:create_app --factory --reload
 - 기존 백엔드(`backend/main.py`)는 별도 실행 경로이며 새 앱과 섞이지 않습니다.
 - 인증 API: `POST /api/auth/register`, `/login`, `/refresh`, `/logout`, `GET /api/me`. access token은 응답 본문(브라우저 메모리), refresh token은 httpOnly 쿠키(`/api/auth` 경로 전용)로 전달됩니다.
 
+### 학습 콘텐츠
+
+학습 트랙은 `backend/content/<트랙>/`에 파일로 관리합니다. `track.yaml`에 트랙 정보를, `units/`에 단원마다 파일 하나를 둡니다. 새 트랙을 추가할 때 코드는 바꾸지 않습니다.
+
+```bash
+cd backend
+uv run python -m app.content_loader load content/python --dry-run   # 바뀔 내용만 확인
+uv run python -m app.content_loader load content/python             # DB에 반영
+```
+
+- 같은 파일을 여러 번 반영해도 결과가 같습니다. 파일에서 지운 단원·활동은 삭제되지 않고 `retired`(비공개) 처리됩니다.
+- 형식 오류(중복 slug·순서, 필수 항목 누락, http(s)가 아닌 링크, 렌더링되지 않는 굵게 표시 등)가 있으면 아무것도 반영하지 않습니다.
+- 이미지·동영상은 저장소에 넣지 않고 외부 링크로 연결합니다.
+
 ### 3) 테스트
 
 ```bash
