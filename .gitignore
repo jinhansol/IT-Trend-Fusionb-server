@@ -43,3 +43,7 @@ coverage/
 # DevHub 2.0: example env files are documentation and must be committed
 !.env.example
 !**/.env.example
+
+# Playwright E2E output
+e2e/test-results/
+e2e/playwright-report/

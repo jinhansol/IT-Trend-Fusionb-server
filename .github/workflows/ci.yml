@@ -88,7 +88,7 @@ jobs:
       - name: Lint DevHub 2.0 files
         run: >-
           npx eslint vite.config.js src/main.jsx src/api/client.js src/api/client.test.js
-          src/api/auth.js src/api/learning.js src/auth src/hooks src/test
+          src/api/auth.js src/api/learning.js src/api/progress.js src/auth src/hooks src/test
           src/components/learn src/pages/career src/router/AppRouter.jsx
           src/components/common/HeaderNav.jsx src/modals/LoginPopup.jsx src/modals/SignupPopup.jsx
 
@@ -100,6 +100,60 @@ jobs:
         run: npm run lint
 
       - run: npm run build
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Start MariaDB (same compose file as local development)
+        run: docker compose up -d --wait mariadb
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.11.32"
+          working-directory: backend
+
+      - name: Install backend dependencies (locked)
+        working-directory: backend
+        run: uv sync --locked
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install frontend and E2E dependencies
+        run: |
+          npm ci --prefix frontend
+          npm ci --prefix e2e
+
+      - name: Install Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      # Migrates the test database, loads content, then starts the API and Vite.
+      - name: Run E2E tests
+        working-directory: e2e
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+      - name: MariaDB logs on failure
+        if: failure()
+        run: docker compose logs mariadb
 
   secrets:
     name: Secret scan
