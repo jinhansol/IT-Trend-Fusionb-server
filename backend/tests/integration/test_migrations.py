@@ -27,6 +27,12 @@ HEAD_TABLES = {
     "user_activity_records",
     "user_unit_progress",
     "xp_ledger",
+    "technologies",
+    "technology_aliases",
+    "content_sources",
+    "contents",
+    "content_technologies",
+    "job_runs",
 }
 
 
