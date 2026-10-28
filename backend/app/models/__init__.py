@@ -1,4 +1,5 @@
-"""ORM models. Import every model module here so Alembic autogenerate sees it.
+"""ORM models. Import every model module here so Alembic autogenerate sees it."""
 
-No domain tables exist yet (Phase 1).
-"""
+from app.models.user import RefreshToken, User, UserSettings
+
+__all__ = ["RefreshToken", "User", "UserSettings"]
