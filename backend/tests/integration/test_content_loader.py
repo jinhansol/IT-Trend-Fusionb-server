@@ -7,7 +7,7 @@ from app.content_loader import __main__ as cli
 from app.content_loader.loader import apply_track
 from app.content_loader.schema import read_track_directory
 from app.db.session import create_session_factory
-from tests.content_helpers import activity, unit, write_track
+from tests.content_helpers import activity, question, quiz, unit, write_track
 
 pytestmark = pytest.mark.integration
 
@@ -144,3 +144,67 @@ def test_cli_dry_run_saves_nothing_and_errors_write_nothing(
 
     assert cli.main(["load", str(directory)]) == 0
     assert rows(clean_db, "SELECT slug FROM learning_tracks") == [("sample",)]
+
+
+QUIZ_SQL = (
+    "SELECT q.version, q.status, COUNT(qq.id) FROM quizzes q "
+    "LEFT JOIN quiz_questions qq ON qq.quiz_id = q.id GROUP BY q.id ORDER BY q.version"
+)
+
+
+def _attempt_current_quiz(engine):
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (email, password_hash, display_name, created_at, updated_at) "
+                "VALUES ('q@example.com', 'x', 'Q', NOW(6), NOW(6))"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO quiz_attempts (user_id, quiz_id, client_submission_id, score, "
+                "max_score, score_percent, passed, submitted_at) SELECT u.id, q.id, "
+                "'00000000-0000-0000-0000-000000000001', 0, 2, 0, 0, NOW(6) "
+                "FROM users u, quizzes q WHERE q.status = 'published'"
+            )
+        )
+
+
+def test_quiz_lifecycle_versions_only_after_attempts(tmp_path, load, clean_db):
+    original = quiz([question("q1"), question("q2")])
+    report = load(write_track(tmp_path, units=[unit("one", 1, quiz=original)]))
+    assert "quiz one v1" in report.created
+    assert rows(clean_db, QUIZ_SQL) == [(1, "published", 2)]
+
+    assert not load(write_track(tmp_path, units=[unit("one", 1, quiz=original)])).changed
+
+    # Not attempted yet: edited in place, still version 1.
+    edited = quiz([question("q1"), question("q2"), question("q3")])
+    report = load(write_track(tmp_path, units=[unit("one", 1, quiz=edited)]))
+    assert report.updated == ["quiz one v1"]
+    assert rows(clean_db, QUIZ_SQL) == [(1, "published", 3)]
+
+    # Attempted: the old version is kept for history and a new one is published.
+    _attempt_current_quiz(clean_db)
+    report = load(write_track(tmp_path, units=[unit("one", 1, quiz=quiz([question("q1")]))]))
+    assert report.retired == ["quiz one v1"] and report.created == ["quiz one v2"]
+    assert rows(clean_db, QUIZ_SQL) == [(1, "retired", 3), (2, "published", 1)]
+
+    # Removing the quiz from the file retires it.
+    report = load(write_track(tmp_path, units=[unit("one", 1)]))
+    assert report.retired == ["quiz one v2"]
+    assert rows(clean_db, "SELECT COUNT(*) FROM quizzes WHERE status = 'published'") == [(0,)]
+
+
+def test_quiz_answers_are_stored_per_choice(tmp_path, load, clean_db):
+    load(
+        write_track(
+            tmp_path,
+            units=[
+                unit("one", 1, quiz=quiz([question("q1", type="multiple", correct=("a", "c"))]))
+            ],
+        )
+    )
+    assert rows(
+        clean_db, "SELECT `key`, position, is_correct FROM quiz_choices ORDER BY position"
+    ) == [("a", 1, 1), ("b", 2, 0), ("c", 3, 1)]

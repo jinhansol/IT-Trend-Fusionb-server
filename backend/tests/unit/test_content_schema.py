@@ -1,7 +1,7 @@
 import pytest
 
 from app.content_loader.schema import ContentError, read_track_directory
-from tests.content_helpers import activity, unit, write_track
+from tests.content_helpers import activity, question, quiz, unit, write_track
 
 
 def test_valid_track_is_read_in_order(tmp_path):
@@ -33,6 +33,14 @@ def test_valid_track_is_read_in_order(tmp_path):
         ([unit(unexpected="field")], "unexpected"),
         ([unit(status="retired")], "status"),
         ([unit(activities=[activity(body_md="값에는 **자료형(type)**이 있다")])], "bold"),
+        ([unit(quiz=quiz([question(correct=())]))], "exactly one correct"),
+        ([unit(quiz=quiz([question(correct=("a", "b"))]))], "exactly one correct"),
+        ([unit(quiz=quiz([question(type="multiple", correct=())]))], "at least one correct"),
+        ([unit(quiz=quiz([question("q1"), question("q1")]))], "duplicate question key"),
+        ([unit(quiz=quiz([question(choices=("a", "a"), correct=("a",))]))], "duplicate choice key"),
+        ([unit(quiz=quiz([question(choices=("a",), correct=("a",))]))], "choices"),
+        ([unit(quiz=quiz([]))], "questions"),
+        ([unit(quiz=quiz(pass_score_percent=0))], "pass_score_percent"),
     ],
 )
 def test_invalid_content_is_rejected_with_file_name(tmp_path, units, message):
@@ -61,3 +69,17 @@ def test_bold_followed_by_korean_after_a_letter_is_fine(tmp_path):
         units=[unit(activities=[activity(body_md="**대입**이라고 하고 **자료형**(type)")])],
     )
     assert read_track_directory(directory).units[0].activities[0].body_md.startswith("**대입**")
+
+
+def test_quiz_is_optional_and_parsed(tmp_path):
+    directory = write_track(
+        tmp_path,
+        units=[
+            unit("with-quiz", 1, quiz=quiz([question(type="multiple", correct=("a", "c"))])),
+            unit("no-quiz", 2),
+        ],
+    )
+    units = {u.slug: u for u in read_track_directory(directory).units}
+    assert units["no-quiz"].quiz is None
+    choices = units["with-quiz"].quiz.questions[0].choices
+    assert [c.key for c in choices if c.correct] == ["a", "c"]

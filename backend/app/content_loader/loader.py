@@ -2,16 +2,21 @@
 
 Idempotent: loading the same files twice changes nothing. Units and activities
 missing from the files are retired (never deleted) and lose their position.
+Quizzes are versioned: an attempted version is never edited; a changed quiz
+becomes a new version and the old one is retired.
 The caller owns the transaction.
 """
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.orm import Session
 
-from app.content_loader.schema import ActivityDef, TrackContent, UnitDef
+from app.content_loader.schema import ActivityDef, QuizDef, TrackContent, UnitDef
 from app.models.learning import LearningActivity, LearningTrack, LearningUnit
+from app.models.quiz import Quiz, QuizAttempt, QuizChoice, QuizQuestion
 
 RETIRED = "retired"
 
@@ -127,6 +132,7 @@ def apply_track(db: Session, content: TrackContent) -> LoadReport:
             if unit_snapshot[unit_def.slug] != _unit_snapshot(unit):
                 report.updated.append(f"unit {unit_def.slug}")
         _apply_activities(db, unit, unit_def, report)
+        _apply_quiz(db, unit, unit_def.quiz, report)
 
     db.flush()
     return report
@@ -175,3 +181,85 @@ def _activity_snapshot(activity: LearningActivity) -> tuple:
 
 def _unit_snapshot(unit: LearningUnit) -> tuple:
     return (unit.position, unit.title, unit.summary, unit.estimated_minutes, unit.status)
+
+
+def _quiz_hash(quiz_def: QuizDef) -> str:
+    canonical = json.dumps(quiz_def.model_dump(), sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _apply_quiz(
+    db: Session, unit: LearningUnit, quiz_def: QuizDef | None, report: LoadReport
+) -> None:
+    current = db.scalar(
+        select(Quiz).where(Quiz.unit_id == unit.id, Quiz.status == "published").with_for_update()
+    )
+    label = f"quiz {unit.slug}"
+
+    if quiz_def is None:
+        if current is not None:
+            current.status = RETIRED
+            db.flush()
+            report.retired.append(f"{label} v{current.version}")
+        return
+
+    content_hash = _quiz_hash(quiz_def)
+    if current is not None and current.content_hash == content_hash:
+        return
+
+    attempted = current is not None and db.scalar(
+        select(exists().where(QuizAttempt.quiz_id == current.id))
+    )
+    if current is not None and not attempted:
+        # Nobody has answered this version yet: edit it in place.
+        question_ids = select(QuizQuestion.id).where(QuizQuestion.quiz_id == current.id)
+        db.execute(delete(QuizChoice).where(QuizChoice.question_id.in_(question_ids)))
+        db.execute(delete(QuizQuestion).where(QuizQuestion.quiz_id == current.id))
+        current.pass_score_percent = quiz_def.pass_score_percent
+        current.content_hash = content_hash
+        _insert_questions(db, current, quiz_def)
+        report.updated.append(f"{label} v{current.version}")
+        return
+
+    if current is not None:
+        current.status = RETIRED  # frees the one-published-quiz-per-unit slot
+        db.flush()
+        report.retired.append(f"{label} v{current.version}")
+
+    latest = db.scalar(select(func.max(Quiz.version)).where(Quiz.unit_id == unit.id)) or 0
+    quiz = Quiz(
+        unit_id=unit.id,
+        version=latest + 1,
+        status="published",
+        pass_score_percent=quiz_def.pass_score_percent,
+        content_hash=content_hash,
+    )
+    db.add(quiz)
+    db.flush()
+    _insert_questions(db, quiz, quiz_def)
+    report.created.append(f"{label} v{quiz.version}")
+
+
+def _insert_questions(db: Session, quiz: Quiz, quiz_def: QuizDef) -> None:
+    for position, question_def in enumerate(quiz_def.questions, start=1):
+        question = QuizQuestion(
+            quiz_id=quiz.id,
+            key=question_def.key,
+            position=position,
+            type=question_def.type,
+            prompt=question_def.prompt,
+            explanation=question_def.explanation,
+        )
+        db.add(question)
+        db.flush()
+        db.add_all(
+            QuizChoice(
+                question_id=question.id,
+                key=choice.key,
+                position=choice_position,
+                label=choice.label,
+                is_correct=choice.correct,
+            )
+            for choice_position, choice in enumerate(question_def.choices, start=1)
+        )
+    db.flush()

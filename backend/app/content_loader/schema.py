@@ -65,13 +65,7 @@ class ActivityDef(_Strict):
     @field_validator("body_md")
     @classmethod
     def _bold_renders(cls, value: str | None) -> str | None:
-        match = _UNCLOSED_BOLD.search(value or "")
-        if match:
-            raise ValueError(
-                f"bold text will not render: {match.group(0)!r} "
-                "(move the punctuation outside the ** markers)"
-            )
-        return value
+        return _check_bold(value)
 
     @model_validator(mode="after")
     def _has_content(self) -> "ActivityDef":
@@ -79,6 +73,59 @@ class ActivityDef(_Strict):
             raise ValueError("an activity needs a url or body_md")
         if self.kind in ("external", "video") and self.url is None:
             raise ValueError(f"'{self.kind}' activities need a url")
+        return self
+
+
+def _check_bold(value: str | None) -> str | None:
+    match = _UNCLOSED_BOLD.search(value or "")
+    if match:
+        raise ValueError(
+            f"bold text will not render: {match.group(0)!r} "
+            "(move the punctuation outside the ** markers)"
+        )
+    return value
+
+
+Key = Annotated[str, StringConstraints(pattern=SLUG_PATTERN, max_length=32)]
+Markdown = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)]
+
+
+class ChoiceDef(_Strict):
+    key: Key
+    label: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    correct: bool = False
+
+
+class QuestionDef(_Strict):
+    key: Key
+    type: Literal["single", "multiple"] = "single"
+    prompt: Markdown
+    explanation: Markdown | None = None
+    choices: list[ChoiceDef] = Field(min_length=2, max_length=8)
+
+    @field_validator("prompt", "explanation")
+    @classmethod
+    def _bold_renders(cls, value: str | None) -> str | None:
+        return _check_bold(value)
+
+    @model_validator(mode="after")
+    def _answers_make_sense(self) -> "QuestionDef":
+        _require_unique([c.key for c in self.choices], f"choice key in question {self.key}")
+        correct = sum(c.correct for c in self.choices)
+        if self.type == "single" and correct != 1:
+            raise ValueError(f"question {self.key}: single-choice needs exactly one correct choice")
+        if self.type == "multiple" and correct < 1:
+            raise ValueError(f"question {self.key}: needs at least one correct choice")
+        return self
+
+
+class QuizDef(_Strict):
+    pass_score_percent: int = Field(default=80, ge=1, le=100)
+    questions: list[QuestionDef] = Field(min_length=1, max_length=30)
+
+    @model_validator(mode="after")
+    def _unique_questions(self) -> "QuizDef":
+        _require_unique([q.key for q in self.questions], "question key")
         return self
 
 
@@ -90,6 +137,8 @@ class UnitDef(_Strict):
     estimated_minutes: int | None = Field(default=None, gt=0, le=600)
     status: Literal["draft", "published"] = "published"
     activities: list[ActivityDef] = Field(min_length=1)
+    # A unit without a quiz can be studied but not completed (completion needs a pass).
+    quiz: QuizDef | None = None
 
     @model_validator(mode="after")
     def _unique_activity_slugs(self) -> "UnitDef":

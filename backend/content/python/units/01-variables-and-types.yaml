@@ -84,3 +84,64 @@ activities:
       ```
 
       다 했다면 `type(final_price)`가 무엇인지, 왜 그런지 생각해 보세요.
+
+# 초안 — 사용자 검토 전. 정답은 Python 3.12로 확인함.
+quiz:
+  pass_score_percent: 80
+  questions:
+    - key: true-division
+      type: single
+      prompt: "`7 / 2`의 결과는 무엇일까요?"
+      explanation: "`/` 나눗셈의 결과는 항상 `float`입니다. 정수 몫이 필요하면 `//`를 씁니다."
+      choices:
+        - { key: a, label: "3" }
+        - { key: b, label: "3.5", correct: true }
+        - { key: c, label: "4" }
+        - { key: d, label: "오류가 난다" }
+
+    - key: invalid-name
+      type: single
+      prompt: "변수 이름으로 **쓸 수 없는** 것은 무엇일까요?"
+      explanation: "변수 이름은 숫자로 시작할 수 없습니다. 밑줄(`_`)로는 시작할 수 있습니다."
+      choices:
+        - { key: a, label: "user_name" }
+        - { key: b, label: "_count" }
+        - { key: c, label: "2nd_place", correct: true }
+        - { key: d, label: "total2" }
+
+    - key: int-results
+      type: multiple
+      prompt: "결과의 자료형이 `int`인 것을 **모두** 고르세요."
+      explanation: "`//`의 결과와 `int()`로 변환한 값은 `int`입니다. `/`의 결과와, 실수가 섞인 계산은 `float`입니다."
+      choices:
+        - { key: a, label: "7 // 2", correct: true }
+        - { key: b, label: "4 / 2" }
+        - { key: c, label: "int(\"42\")", correct: true }
+        - { key: d, label: "3 * 1.0" }
+
+    - key: str-plus-int
+      type: single
+      prompt: "`\"나이: \" + 20`을 실행하면 어떻게 될까요?"
+      explanation: "문자열과 숫자는 `+`로 바로 이을 수 없어 `TypeError`가 납니다. `\"나이: \" + str(20)`처럼 바꿔야 합니다."
+      choices:
+        - { key: a, label: "\"나이: 20\"이 된다" }
+        - { key: b, label: "TypeError가 발생한다", correct: true }
+        - { key: c, label: "SyntaxError가 발생한다" }
+        - { key: d, label: "\"나이: \"만 남는다" }
+
+    - key: bool-type
+      type: single
+      prompt: |
+        다음 코드의 출력은 무엇일까요?
+
+        ```python
+        x = 5
+        x = x * 2
+        print(type(x > 8))
+        ```
+      explanation: "`x`는 10이 되고, `x > 8`은 비교 결과인 `True`이므로 자료형은 `bool`입니다."
+      choices:
+        - { key: a, label: "<class 'int'>" }
+        - { key: b, label: "<class 'bool'>", correct: true }
+        - { key: c, label: "True" }
+        - { key: d, label: "10" }
