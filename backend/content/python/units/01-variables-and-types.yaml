@@ -1,0 +1,86 @@
+# 초안 — 사용자 검토 전. 퀴즈는 Phase 4에서 추가합니다.
+slug: variables-and-types
+position: 1
+title: 변수와 기본 자료형
+summary: >-
+  값을 이름에 담는 변수, 그리고 Python이 다루는 기본 자료형(int, float, str, bool)을 배웁니다.
+estimated_minutes: 40
+status: published
+
+activities:
+  - slug: variables
+    kind: reading
+    title: 변수와 대입
+    required: true
+    body_md: |
+      **변수**는 값에 붙이는 이름입니다. `=` 기호로 값을 이름에 연결하는 것을 **대입**이라고 합니다.
+
+      ```python
+      age = 20
+      name = "DevHub"
+      age = age + 1   # 오른쪽을 먼저 계산한 뒤 다시 age에 대입합니다
+      print(name, age)  # DevHub 21
+      ```
+
+      `=`는 수학의 "같다"가 아니라 "오른쪽 값을 왼쪽 이름에 담는다"는 뜻입니다.
+
+      ### 이름 규칙
+      - 영문자, 숫자, 밑줄(`_`)을 쓸 수 있고 **숫자로 시작할 수 없습니다** (`1st`는 불가, `first`는 가능).
+      - 대소문자를 구분합니다. `score`와 `Score`는 서로 다른 변수입니다.
+      - `if`, `for`, `class` 같은 **예약어**는 이름으로 쓸 수 없습니다.
+      - 관례상 여러 단어는 밑줄로 잇습니다: `user_name`, `total_price`.
+
+  - slug: basic-types
+    kind: reading
+    title: "기본 자료형: int, float, str, bool"
+    required: true
+    body_md: |
+      모든 값에는 **자료형**(type)이 있습니다. `type()` 함수로 확인할 수 있습니다.
+
+      | 자료형 | 의미 | 예시 |
+      |---|---|---|
+      | `int` | 정수 | `42`, `-7` |
+      | `float` | 실수(소수점) | `3.14`, `0.5` |
+      | `str` | 문자열 | `"hello"`, `'파이썬'` |
+      | `bool` | 참/거짓 | `True`, `False` |
+
+      ```python
+      print(type(42))      # <class 'int'>
+      print(type(3.14))    # <class 'float'>
+      print(type("hi"))    # <class 'str'>
+      print(type(1 < 2))   # <class 'bool'>
+      ```
+
+      ### 알아둘 점
+      - `/` 나눗셈의 결과는 항상 `float`입니다: `7 / 2`는 `3.5`, `4 / 2`는 `2.0`.
+      - 정수 몫은 `//`, 나머지는 `%`를 씁니다: `7 // 2`는 `3`, `7 % 2`는 `1`.
+      - 문자열과 숫자는 바로 더할 수 없습니다. `"나이: " + 20`은 오류이고, `"나이: " + str(20)`처럼 바꿔야 합니다.
+      - `int("123")`, `float("1.5")`, `str(10)`처럼 자료형을 변환할 수 있습니다. `int("1.5")`는 오류입니다.
+
+  - slug: official-tutorial
+    kind: external
+    title: "공식 튜토리얼: 파이썬을 계산기로 사용하기"
+    url: https://docs.python.org/ko/3/tutorial/introduction.html
+    required: true
+    body_md: |
+      Python 공식 튜토리얼(한국어)의 3장입니다. "숫자"와 "텍스트" 절을 읽으며
+      예제를 직접 실행해 보세요.
+
+  - slug: practice-calculator
+    kind: exercise
+    title: "직접 해보기: 간단한 계산 프로그램"
+    required: false
+    body_md: |
+      아래 프로그램을 완성해 보세요.
+
+      ```python
+      price = 12000      # 상품 가격 (원)
+      quantity = 3       # 수량
+      discount = 0.1     # 할인율 10%
+
+      # 1. 총 금액(price × quantity)을 total에 담으세요.
+      # 2. 할인된 금액을 final_price에 담으세요.
+      # 3. "결제 금액: 32400원"처럼 출력하세요. (힌트: int(), str())
+      ```
+
+      다 했다면 `type(final_price)`가 무엇인지, 왜 그런지 생각해 보세요.

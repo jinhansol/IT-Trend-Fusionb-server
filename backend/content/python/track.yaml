@@ -1,0 +1,9 @@
+# Python 트랙 메타데이터. 단원은 units/ 아래에 파일 하나씩 둡니다.
+# 반영: cd backend && uv run python -m app.content_loader load content/python
+slug: python
+title: Python 기초
+description: >-
+  처음 프로그래밍을 배우는 사람을 위한 Python 입문 과정입니다.
+  원하는 단원부터 시작할 수 있습니다.
+position: 1
+status: published
