@@ -27,6 +27,7 @@ class LoadReport:
     created: list[str] = field(default_factory=list)
     updated: list[str] = field(default_factory=list)
     retired: list[str] = field(default_factory=list)
+    kind: str = "track"
 
     @property
     def changed(self) -> bool:
@@ -34,7 +35,7 @@ class LoadReport:
 
     def summary(self) -> str:
         lines = [
-            f"track '{self.track}': {len(self.created)} created, "
+            f"{self.kind} '{self.track}': {len(self.created)} created, "
             f"{len(self.updated)} updated, {len(self.retired)} retired"
         ]
         for label, names in (("+", self.created), ("~", self.updated), ("-", self.retired)):

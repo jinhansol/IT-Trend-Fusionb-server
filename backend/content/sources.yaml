@@ -1,0 +1,79 @@
+# Where the collector reads content. Only official APIs and RSS/Atom feeds.
+# Full articles are never stored: title, short description, link, author, dates
+# and the metrics a source provides.
+#
+# kind      news | blog | community | qna
+# adapter   rss | devto | hackernews | stackoverflow
+# channel   Dev screen tab (required except for news). Sources sharing a channel share
+#           its name and either all have metrics (API) or are all feeds (rss).
+# status    active | paused  (sources removed from this file are retired)
+#
+# Feed addresses carried over from v1 or taken from public listings have not all been
+# checked from this environment. A dead feed only fails its own run (see job_runs).
+#
+# Load: uv run python -m app.content_loader sources content/sources.yaml
+
+sources:
+  # --- Home: IT news (feeds from the v1 news list) -----------------------------------------
+  - { slug: zdnet-korea, name: ZDNet Korea, kind: news, adapter: rss, language: ko, site_url: "https://zdnet.co.kr/", feed_url: "https://www.zdnet.co.kr/Include/news.xml" }
+  - { slug: etnews, name: 전자신문, kind: news, adapter: rss, language: ko, site_url: "https://www.etnews.com/", feed_url: "https://rss.etnews.com/Section903.xml" }
+  - { slug: itworld-korea, name: ITWorld Korea, kind: news, adapter: rss, language: ko, site_url: "https://www.itworld.co.kr/", feed_url: "https://www.itworld.co.kr/rss/all.xml" }
+  - { slug: ciokorea, name: CIO Korea, kind: news, adapter: rss, language: ko, site_url: "https://www.ciokorea.com/", feed_url: "https://www.ciokorea.com/rss/all.xml" }
+  - { slug: koreaittimes, name: Korea IT Times, kind: news, adapter: rss, language: en, site_url: "https://www.koreaittimes.com/", feed_url: "https://koreaittimes.com/rss/allArticle.xml" }
+  - { slug: ddaily, name: 디지털데일리, kind: news, adapter: rss, language: ko, site_url: "https://www.ddaily.co.kr/", feed_url: "https://www.ddaily.co.kr/news/rss/allArticle.xml" }
+  - { slug: bloter, name: 블로터, kind: news, adapter: rss, language: ko, site_url: "https://www.bloter.net/", feed_url: "https://www.bloter.net/rss" }
+  - { slug: boannews, name: 보안뉴스, kind: news, adapter: rss, language: ko, site_url: "https://www.boannews.com/", feed_url: "https://www.boannews.com/media/rss.xml" }
+  - { slug: techcrunch, name: TechCrunch, kind: news, adapter: rss, language: en, site_url: "https://techcrunch.com/", feed_url: "https://techcrunch.com/feed/" }
+  - { slug: wired-business, name: WIRED Business, kind: news, adapter: rss, language: en, site_url: "https://www.wired.com/", feed_url: "https://www.wired.com/feed/category/business/latest/rss" }
+  - { slug: the-verge, name: The Verge, kind: news, adapter: rss, language: en, site_url: "https://www.theverge.com/", feed_url: "https://www.theverge.com/rss/index.xml" }
+  - { slug: ars-technica, name: Ars Technica, kind: news, adapter: rss, language: en, site_url: "https://arstechnica.com/", feed_url: "https://feeds.arstechnica.com/arstechnica/index" }
+  - { slug: venturebeat, name: VentureBeat, kind: news, adapter: rss, language: en, site_url: "https://venturebeat.com/", feed_url: "https://venturebeat.com/feed/" }
+  - { slug: infoq, name: InfoQ, kind: news, adapter: rss, language: en, site_url: "https://www.infoq.com/", feed_url: "https://feeds.infoq.com/" }
+  - { slug: slashdot, name: Slashdot, kind: news, adapter: rss, language: en, site_url: "https://slashdot.org/", feed_url: "https://rss.slashdot.org/Slashdot/slashdotMain" }
+
+  # --- Dev: developer posts and questions --------------------------------------------------
+  - slug: devto
+    name: DEV Community
+    kind: blog
+    adapter: devto
+    language: en
+    site_url: "https://dev.to/"
+    options: { top_days: 7 }
+    channel: devto
+    channel_name: DEV Community
+  - slug: hackernews
+    name: Hacker News
+    kind: community
+    adapter: hackernews
+    language: en
+    site_url: "https://news.ycombinator.com/"
+    options: { tags: front_page }
+    channel: hackernews
+    channel_name: Hacker News
+  - slug: stackoverflow
+    name: Stack Overflow
+    kind: qna
+    adapter: stackoverflow
+    language: en
+    site_url: "https://stackoverflow.com/"
+    options: { sort: hot }
+    channel: stackoverflow
+    channel_name: Stack Overflow
+  - slug: geeknews
+    name: GeekNews
+    kind: community
+    adapter: rss
+    language: ko
+    site_url: "https://news.hada.io/"
+    feed_url: "https://feeds.feedburner.com/geeknews-feed"
+    channel: geeknews
+    channel_name: GeekNews
+
+  # --- Dev: Korean company tech blogs (one tab) --------------------------------------------
+  - { slug: toss-tech, name: 토스 기술 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://toss.tech/", feed_url: "https://toss.tech/rss.xml", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
+  - { slug: woowahan-tech, name: 우아한형제들 기술 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://techblog.woowahan.com/", feed_url: "https://techblog.woowahan.com/feed/", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
+  - { slug: kakao-tech, name: 카카오 기술 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://tech.kakao.com/", feed_url: "https://tech.kakao.com/feed/", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
+  - { slug: naver-d2, name: NAVER D2, kind: blog, adapter: rss, language: ko, site_url: "https://d2.naver.com/", feed_url: "https://d2.naver.com/d2.atom", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
+  - { slug: daangn-tech, name: 당근 테크 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://medium.com/daangn", feed_url: "https://medium.com/feed/daangn", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
+  - { slug: kakaopay-tech, name: 카카오페이 기술 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://tech.kakaopay.com/", feed_url: "https://tech.kakaopay.com/rss", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
+  - { slug: lycorp-tech, name: LY Corporation Tech Blog, kind: blog, adapter: rss, language: ko, site_url: "https://techblog.lycorp.co.jp/ko", feed_url: "https://techblog.lycorp.co.jp/ko/feed/index.xml", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }

@@ -1,0 +1,271 @@
+# Technology taxonomy shared by collected content (Phase 5), interests (Phase 6)
+# and the roadmap (Phase 7).
+#
+# aliases      lower-case words matched as whole words in titles, descriptions and tags
+# tag_aliases  matched only against a source's own tags (too common as ordinary words)
+# kind: field  broad areas, used for the "분야 비율" chart
+#
+# Load: uv run python -m app.content_loader technologies content/technologies.yaml
+
+technologies:
+  # --- fields ------------------------------------------------------------------------------
+  - slug: ai
+    name: AI
+    kind: field
+    aliases: [ai, artificial intelligence, 인공지능, machine learning, 머신러닝, deep learning, 딥러닝, generative ai, 생성형 ai, 생성 ai]
+    tag_aliases: [machinelearning, deeplearning, artificialintelligence]
+  - slug: frontend
+    name: 프론트엔드
+    kind: field
+    aliases: [frontend, front-end, 프론트엔드, 프런트엔드]
+    tag_aliases: [webdev, css, html]
+  - slug: backend
+    name: 백엔드
+    kind: field
+    aliases: [backend, back-end, 백엔드, microservices, microservice, 마이크로서비스, msa]
+    tag_aliases: [api]
+  - slug: mobile
+    name: 모바일
+    kind: field
+    aliases: [mobile app, mobile development, 모바일 앱, 모바일 개발, 앱 개발]
+    tag_aliases: [mobile]
+  - slug: data
+    name: 데이터
+    kind: field
+    aliases: [data engineering, data engineer, big data, 빅데이터, 데이터 엔지니어링, 데이터 분석, data pipeline, 데이터 파이프라인, etl, data warehouse, 데이터 웨어하우스]
+    tag_aliases: [datascience, dataengineering, data]
+  - slug: cloud
+    name: 클라우드
+    kind: field
+    aliases: [cloud computing, cloud native, cloud-native, 클라우드, serverless, 서버리스]
+    tag_aliases: [cloud]
+  - slug: devops
+    name: DevOps
+    kind: field
+    aliases: [devops, 데브옵스, ci/cd, sre, platform engineering, 플랫폼 엔지니어링, observability, 관측성, 모니터링]
+    tag_aliases: [cicd, monitoring]
+  - slug: security
+    name: 보안
+    kind: field
+    aliases: [security, cybersecurity, 보안, 사이버보안, vulnerability, vulnerabilities, 취약점, ransomware, 랜섬웨어, malware, 악성코드, 해킹, zero trust, 제로트러스트, 개인정보]
+    tag_aliases: [infosec]
+  - slug: database
+    name: 데이터베이스
+    kind: field
+    aliases: [database, databases, 데이터베이스, sql, nosql]
+    tag_aliases: [db]
+  - slug: blockchain
+    name: 블록체인
+    kind: field
+    aliases: [blockchain, 블록체인, web3, 가상자산, cryptocurrency, 암호화폐]
+    tag_aliases: [crypto]
+  - slug: game
+    name: 게임 개발
+    kind: field
+    aliases: [game development, gamedev, 게임 개발, unreal engine, 언리얼 엔진]
+    tag_aliases: [unity, unity3d]
+
+  # --- languages ---------------------------------------------------------------------------
+  - slug: python
+    name: Python
+    kind: language
+    aliases: [python, 파이썬]
+  - slug: javascript
+    name: JavaScript
+    kind: language
+    aliases: [javascript, 자바스크립트, ecmascript]
+    tag_aliases: [js]
+  - slug: typescript
+    name: TypeScript
+    kind: language
+    aliases: [typescript, 타입스크립트]
+    tag_aliases: [ts]
+  - slug: java
+    name: Java
+    kind: language
+    aliases: [java, 자바, jvm]
+  - slug: kotlin
+    name: Kotlin
+    kind: language
+    aliases: [kotlin, 코틀린]
+  - slug: go
+    name: Go
+    kind: language
+    aliases: [golang, go언어, go 언어]
+    tag_aliases: [go]
+  - slug: rust
+    name: Rust
+    kind: language
+    aliases: [rust, 러스트, rustlang]
+  - slug: cpp
+    name: C++
+    kind: language
+    aliases: [c++]
+    tag_aliases: [cpp]
+  - slug: csharp
+    name: C#
+    kind: language
+    aliases: [c#]
+    tag_aliases: [csharp, dotnet]
+  - slug: swift
+    name: Swift
+    kind: language
+    aliases: [swiftui, 스위프트]
+    tag_aliases: [swift]
+  - slug: php
+    name: PHP
+    kind: language
+    aliases: [php]
+  - slug: ruby
+    name: Ruby
+    kind: language
+    aliases: [ruby on rails, 루비]
+    tag_aliases: [ruby, rails]
+
+  # --- frameworks & libraries --------------------------------------------------------------
+  - slug: react
+    name: React
+    kind: library
+    aliases: [react.js, reactjs, 리액트]
+    tag_aliases: [react]
+  - slug: nextjs
+    name: Next.js
+    kind: framework
+    aliases: [next.js, nextjs]
+  - slug: vue
+    name: Vue.js
+    kind: framework
+    aliases: [vue.js, vuejs, vue 3]
+    tag_aliases: [vue]
+  - slug: angular
+    name: Angular
+    kind: framework
+    aliases: [angular, angularjs]
+  - slug: svelte
+    name: Svelte
+    kind: framework
+    aliases: [svelte, sveltekit]
+  - slug: nodejs
+    name: Node.js
+    kind: platform
+    aliases: [node.js, nodejs]
+    tag_aliases: [node]
+  - slug: nestjs
+    name: NestJS
+    kind: framework
+    aliases: [nestjs, nest.js]
+  - slug: spring
+    name: Spring
+    kind: framework
+    aliases: [spring boot, springboot, spring framework, 스프링, 스프링 부트]
+    tag_aliases: [spring]
+  - slug: django
+    name: Django
+    kind: framework
+    aliases: [django, 장고]
+  - slug: fastapi
+    name: FastAPI
+    kind: framework
+    aliases: [fastapi]
+  - slug: flutter
+    name: Flutter
+    kind: framework
+    aliases: [flutter, 플러터]
+  - slug: react-native
+    name: React Native
+    kind: framework
+    aliases: [react native, react-native]
+    tag_aliases: [reactnative]
+  - slug: pytorch
+    name: PyTorch
+    kind: library
+    aliases: [pytorch, 파이토치]
+  - slug: tensorflow
+    name: TensorFlow
+    kind: library
+    aliases: [tensorflow, 텐서플로]
+  - slug: llm
+    name: LLM
+    kind: field
+    aliases: [llm, llms, large language model, large language models, 대규모 언어 모델, 거대언어모델, 거대 언어 모델, chatgpt, gpt-4, gpt-5, rag, ai agent, ai agents, ai 에이전트, mcp]
+    tag_aliases: [genai, openai, claude, gemini, llama]
+
+  # --- platforms & tools -------------------------------------------------------------------
+  - slug: android
+    name: Android
+    kind: platform
+    aliases: [android, 안드로이드]
+  - slug: ios
+    name: iOS
+    kind: platform
+    aliases: [ios]
+  - slug: linux
+    name: Linux
+    kind: platform
+    aliases: [linux, 리눅스]
+  - slug: aws
+    name: AWS
+    kind: platform
+    aliases: [aws, amazon web services]
+  - slug: azure
+    name: Azure
+    kind: platform
+    aliases: [azure, 애저]
+  - slug: gcp
+    name: Google Cloud
+    kind: platform
+    aliases: [gcp, google cloud]
+  - slug: docker
+    name: Docker
+    kind: tool
+    aliases: [docker, 도커, container, containers, 컨테이너]
+  - slug: kubernetes
+    name: Kubernetes
+    kind: tool
+    aliases: [kubernetes, k8s, 쿠버네티스]
+  - slug: terraform
+    name: Terraform
+    kind: tool
+    aliases: [terraform, 테라폼, infrastructure as code]
+    tag_aliases: [iac]
+  - slug: git
+    name: Git
+    kind: tool
+    aliases: [git, github, gitlab, github actions]
+  - slug: postgresql
+    name: PostgreSQL
+    kind: tool
+    aliases: [postgresql, postgres]
+  - slug: mysql
+    name: MySQL
+    kind: tool
+    aliases: [mysql, mariadb]
+  - slug: mongodb
+    name: MongoDB
+    kind: tool
+    aliases: [mongodb, 몽고db]
+  - slug: redis
+    name: Redis
+    kind: tool
+    aliases: [redis, 레디스]
+  - slug: kafka
+    name: Kafka
+    kind: tool
+    aliases: [kafka, 카프카]
+  - slug: spark
+    name: Apache Spark
+    kind: tool
+    aliases: [apache spark, pyspark]
+    tag_aliases: [spark]
+  - slug: elasticsearch
+    name: Elasticsearch
+    kind: tool
+    aliases: [elasticsearch, opensearch, 엘라스틱서치]
+  - slug: graphql
+    name: GraphQL
+    kind: tool
+    aliases: [graphql]
+  - slug: webassembly
+    name: WebAssembly
+    kind: tool
+    aliases: [webassembly, wasm]
