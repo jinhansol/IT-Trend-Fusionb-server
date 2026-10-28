@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.schemas.learning import TrackDetail, TrackListResponse, UnitDetail
+from app.schemas.progress import QuizOut
 from app.services import learning_catalog
 
 # Public learning catalog. Personal progress lives under /api/me (Phase 4).
@@ -22,3 +23,8 @@ def get_track(track_slug: str, db: Session = Depends(get_db)) -> TrackDetail:
 @router.get("/{track_slug}/units/{unit_slug}", response_model=UnitDetail)
 def get_unit(track_slug: str, unit_slug: str, db: Session = Depends(get_db)) -> UnitDetail:
     return learning_catalog.get_unit(db, track_slug, unit_slug)
+
+
+@router.get("/{track_slug}/units/{unit_slug}/quiz", response_model=QuizOut)
+def get_unit_quiz(track_slug: str, unit_slug: str, db: Session = Depends(get_db)) -> QuizOut:
+    return learning_catalog.get_unit_quiz(db, track_slug, unit_slug)

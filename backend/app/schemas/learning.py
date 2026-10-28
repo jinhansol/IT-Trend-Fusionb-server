@@ -49,6 +49,12 @@ class ActivityOut(BaseModel):
     is_required: bool
 
 
+class UnitQuizSummary(BaseModel):
+    id: int
+    question_count: int
+    pass_score_percent: int
+
+
 class UnitDetail(BaseModel):
     slug: str
     position: int
@@ -59,3 +65,5 @@ class UnitDetail(BaseModel):
     activities: list[ActivityOut]
     prev: UnitRef | None
     next: UnitRef | None
+    # None when the unit has no quiz yet (it can be studied but not completed).
+    quiz: UnitQuizSummary | None = None

@@ -1,10 +1,11 @@
 """Read-only queries over the learning catalog. Only published rows are visible."""
 
 from sqlalchemy import and_, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import AppError
 from app.models.learning import LearningActivity, LearningTrack, LearningUnit
+from app.models.quiz import Quiz, QuizQuestion
 from app.schemas.learning import (
     ActivityOut,
     TrackDetail,
@@ -12,9 +13,11 @@ from app.schemas.learning import (
     TrackRef,
     TrackSummary,
     UnitDetail,
+    UnitQuizSummary,
     UnitRef,
     UnitSummary,
 )
+from app.schemas.progress import QuizChoiceOut, QuizOut, QuizQuestionOut
 
 PUBLISHED = "published"
 
@@ -129,6 +132,7 @@ def get_unit(db: Session, track_slug: str, unit_slug: str) -> UnitDetail:
         return None
 
     return UnitDetail(
+        quiz=_quiz_summary(db, unit.id),
         slug=unit.slug,
         position=unit.position,
         title=unit.title,
@@ -150,4 +154,58 @@ def get_unit(db: Session, track_slug: str, unit_slug: str) -> UnitDetail:
         ],
         prev=ref(index - 1),
         next=ref(index + 1),
+    )
+
+
+class QuizNotFound(AppError):
+    status_code = 404
+    code = "QUIZ_NOT_FOUND"
+
+    def __init__(self) -> None:
+        super().__init__("Quiz not found")
+
+
+def _published_quiz(db: Session, unit_id: int) -> Quiz | None:
+    return db.scalar(select(Quiz).where(Quiz.unit_id == unit_id, Quiz.status == PUBLISHED))
+
+
+def _quiz_summary(db: Session, unit_id: int) -> UnitQuizSummary | None:
+    quiz = _published_quiz(db, unit_id)
+    if quiz is None:
+        return None
+    count = db.scalar(select(func.count(QuizQuestion.id)).where(QuizQuestion.quiz_id == quiz.id))
+    return UnitQuizSummary(
+        id=quiz.id, question_count=count, pass_score_percent=quiz.pass_score_percent
+    )
+
+
+def get_unit_quiz(db: Session, track_slug: str, unit_slug: str) -> QuizOut:
+    """Public quiz for a unit: questions and choices only, never answers."""
+    track = _published_track(db, track_slug)
+    unit = next((u for u in _published_units(db, track) if u.slug == unit_slug), None)
+    if unit is None:
+        raise UnitNotFound()
+    quiz = _published_quiz(db, unit.id)
+    if quiz is None:
+        raise QuizNotFound()
+    questions = db.scalars(
+        select(QuizQuestion)
+        .where(QuizQuestion.quiz_id == quiz.id)
+        .options(selectinload(QuizQuestion.choices))
+        .order_by(QuizQuestion.position)
+    )
+    return QuizOut(
+        id=quiz.id,
+        version=quiz.version,
+        pass_score_percent=quiz.pass_score_percent,
+        questions=[
+            QuizQuestionOut(
+                id=q.id,
+                position=q.position,
+                type=q.type,
+                prompt=q.prompt,
+                choices=[QuizChoiceOut(id=c.id, label=c.label) for c in q.choices],
+            )
+            for q in questions
+        ],
     )

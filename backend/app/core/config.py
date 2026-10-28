@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     login_rate_limit_attempts: int = Field(default=10, gt=0)
     login_rate_limit_window_seconds: int = Field(default=600, gt=0)
 
+    # Rewards (D04). XP is a reward record, not a skill assessment.
+    xp_per_unit_completion: int = Field(default=100, gt=0)
+    # Level 1 -> 2 needs level_base_xp; each later level needs level_step_xp more.
+    level_base_xp: int = Field(default=100, gt=0)
+    level_step_xp: int = Field(default=50, ge=0)
+    # Stored on every ledger entry so later policy changes stay traceable.
+    xp_policy_version: str = "2026-10-v1"
+
     @model_validator(mode="after")
     def _validate_environment(self) -> "Settings":
         url = self.parsed_database_url()
