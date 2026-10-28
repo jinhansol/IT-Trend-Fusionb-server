@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy import Connection, Engine
+from sqlalchemy import Connection, Engine, text
 
 from app.core.config import Settings
 from app.db.safety import assert_test_database
@@ -22,10 +22,16 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 # Port 9 (discard) on loopback: connection attempts fail fast, nothing is reached.
 UNIT_DB_PASSWORD = "unit-secret-pw"
 UNIT_DATABASE_URL = f"mysql+pymysql://devhub_unit:{UNIT_DB_PASSWORD}@127.0.0.1:9/devhub_unit"
+TEST_JWT_SECRET = "unit-test-jwt-secret-0123456789abcdef"
 
 
 def make_settings(**overrides) -> Settings:
-    values = {"app_env": "local", "database_url": UNIT_DATABASE_URL, "log_level": "INFO"}
+    values = {
+        "app_env": "local",
+        "database_url": UNIT_DATABASE_URL,
+        "jwt_secret": TEST_JWT_SECRET,
+        "log_level": "INFO",
+    }
     values.update(overrides)
     return Settings(_env_file=None, **values)
 
@@ -46,7 +52,7 @@ def integration_settings() -> Settings:
             "(see backend/.env.example), or deselect with -m 'not integration'.",
             pytrace=False,
         )
-    return Settings(_env_file=None, app_env="test", database_url=url)
+    return Settings(_env_file=None, app_env="test", database_url=url, jwt_secret=TEST_JWT_SECRET)
 
 
 @pytest.fixture(scope="session")
@@ -66,3 +72,26 @@ def alembic_config(connection: Connection) -> Config:
     config.attributes["connection"] = connection
     config.attributes["configure_logger"] = False
     return config
+
+
+AUTH_TABLES_IN_DELETE_ORDER = ("refresh_tokens", "user_settings", "users")
+
+
+@pytest.fixture(scope="session")
+def migrated_engine(test_engine: Engine) -> Engine:
+    from alembic import command
+
+    with test_engine.connect() as connection:
+        command.upgrade(alembic_config(connection), "head")
+        connection.commit()
+    return test_engine
+
+
+@pytest.fixture()
+def clean_db(migrated_engine: Engine) -> Iterator[Engine]:
+    """Empty the auth tables after the test. The engine was verified to point at
+    the *_test database before any test ran."""
+    yield migrated_engine
+    with migrated_engine.begin() as connection:
+        for table in AUTH_TABLES_IN_DELETE_ORDER:
+            connection.execute(text(f"DELETE FROM {table}"))

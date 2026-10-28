@@ -15,11 +15,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health
+from app.api.routes import auth, health, me
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import REQUEST_ID_HEADER, RequestIdMiddleware, configure_logging
 from app.db.session import create_db_engine, create_session_factory
+from app.services.rate_limit import FailedAttemptLimiter
 
 logger = logging.getLogger("devhub.app")
 
@@ -28,6 +29,8 @@ API_VERSION = "2.0.0.dev0"
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    if settings.jwt_secret is None:
+        raise RuntimeError("JWT_SECRET is required to run the API")
     configure_logging(settings)
 
     engine = create_db_engine(settings)
@@ -48,6 +51,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
+    app.state.login_limiter = FailedAttemptLimiter(
+        settings.login_rate_limit_attempts, settings.login_rate_limit_window_seconds
+    )
 
     if settings.cors_origins:
         app.add_middleware(
@@ -62,6 +68,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(health.router)
+    app.include_router(auth.router)
+    app.include_router(me.router)
 
     logger.info(
         "DevHub API created (env=%s, database=%s)", settings.app_env, settings.database_name

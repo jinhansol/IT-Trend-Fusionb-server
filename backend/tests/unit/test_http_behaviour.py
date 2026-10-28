@@ -113,3 +113,8 @@ def test_docs_are_disabled_in_production():
 
 def test_docs_are_available_locally(client):
     assert client.get("/api/openapi.json").status_code == 200
+
+
+def test_app_refuses_to_start_without_jwt_secret():
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        create_app(make_settings(jwt_secret=None))

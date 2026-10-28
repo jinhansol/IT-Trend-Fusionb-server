@@ -3,7 +3,7 @@
 import subprocess
 import sys
 
-from tests.conftest import BACKEND_DIR, UNIT_DATABASE_URL
+from tests.conftest import BACKEND_DIR, TEST_JWT_SECRET, UNIT_DATABASE_URL
 
 PROBE = f"""
 import socket, threading
@@ -21,9 +21,15 @@ import app.main
 import app.api.routes.health
 import app.core.config, app.core.errors, app.core.logging
 import app.db.base, app.db.safety, app.db.session, app.models
+import app.core.security, app.services.auth, app.api.routes.auth, app.api.routes.me
 from app.core.config import Settings
 
-settings = Settings(_env_file=None, app_env="local", database_url={UNIT_DATABASE_URL!r})
+settings = Settings(
+    _env_file=None,
+    app_env="local",
+    database_url={UNIT_DATABASE_URL!r},
+    jwt_secret={TEST_JWT_SECRET!r},
+)
 application = app.main.create_app(settings)
 
 assert threading.active_count() == threads_before, "app creation started a thread"
