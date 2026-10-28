@@ -1,66 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 
 // ✅ 경로 수정: 한 단계 더 위로 올라가야 함 (../ -> ../../)
 import LoginPopup from "../../modals/LoginPopup";
 import SignupPopup from "../../modals/SignupPopup";
-import InterestPopup from "../../modals/InterestPopup";
+import { useAuth } from "../../auth/useAuth";
+
+// DevHub 2.0: the login state comes from AuthProvider (server session), not localStorage.
+// The interest popup is hidden until personalization is rebuilt (Phase 6); it still
+// talks to the legacy backend and legacy user ids.
+
+const navItems = [
+  { name: "Home", path: "/" },
+  { name: "Career", path: "/career" },
+  { name: "Dev", path: "/dev" },
+];
 
 export default function HeaderNav() {
-  const [user, setUser] = useState(null);
+  const { status, user, logout } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
-  const [showInterest, setShowInterest] = useState(false);
 
-  // 로그인 상태 유지
-  useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) setUser(JSON.parse(savedUser));
-  }, []);
-
-  // 첫 로그인 → 관심사 팝업 자동 표시
-  useEffect(() => {
-    if (!user) return;
-    const first = localStorage.getItem("firstLogin");
-    if (first === "true") {
-      setShowInterest(true);
-      localStorage.setItem("firstLogin", "false");
-    }
-  }, [user]);
-
-  // -------------------------------------------------------------
-  // 🚪 로그아웃 (여기를 수정했습니다!)
-  // -------------------------------------------------------------
-  const handleLogout = () => {
-    // 1. 저장된 모든 정보 삭제
-    localStorage.removeItem("user");
-    localStorage.removeItem("token"); // 토큰 삭제 필수
-    localStorage.removeItem("firstLogin");
-    
-    // 2. 상태 초기화
-    setUser(null);
-
-    // 3. ✨ [핵심] 페이지를 강제로 새로고침하며 홈으로 이동
-    // 이렇게 해야 Career/Dev 페이지에 남아있던 개인화 데이터가 싹 날아갑니다.
+  const handleLogout = async () => {
+    await logout();
+    // Reload so Career/Dev pages drop any personal data they still hold.
     window.location.href = "/";
   };
-
-  const navItems = [
-    { name: "Home", path: "/" },
-    { name: "Career", path: "/career" },
-    { name: "Dev", path: "/dev" },
-  ];
-
-  const filteredNavItems = navItems.filter((item) => {
-    if (!user?.main_focus) return true;
-
-    const focus = user.main_focus.toLowerCase();
-
-    if (focus === "career") return item.name !== "Dev";
-    if (focus === "dev") return item.name !== "Career";
-    
-    return true;
-  });
 
   return (
     <>
@@ -72,7 +37,7 @@ export default function HeaderNav() {
           </Link>
 
           <div className="hidden md:flex gap-8">
-            {filteredNavItems.map((item) => (
+            {navItems.map((item) => (
               <NavLink
                 key={item.name}
                 to={item.path}
@@ -83,8 +48,8 @@ export default function HeaderNav() {
             ))}
           </div>
 
-          <div className="flex items-center gap-4 text-sm">
-            {!user ? (
+          <div className="flex items-center gap-4 text-sm min-h-[36px]">
+            {status === "anonymous" && (
               <>
                 <button onClick={() => setShowLogin(true)}>Login</button>
                 <button
@@ -94,10 +59,11 @@ export default function HeaderNav() {
                   Sign Up
                 </button>
               </>
-            ) : (
+            )}
+            {status === "authenticated" && (
               <>
-                <span className="cursor-pointer" onClick={() => setShowInterest(true)}>
-                  Welcome, <strong>{user.username}</strong> 👋
+                <span>
+                  Welcome, <strong>{user.display_name}</strong> 👋
                 </span>
 
                 <button className="border px-3 py-1.5 rounded-md" onClick={handleLogout}>
@@ -117,10 +83,6 @@ export default function HeaderNav() {
             setShowLogin(false);
             setShowSignup(true);
           }}
-          setUser={(u) => {
-            setUser(u);
-            localStorage.setItem("user", JSON.stringify(u));
-          }}
         />
       )}
 
@@ -131,19 +93,6 @@ export default function HeaderNav() {
             setShowSignup(false);
             setShowLogin(true);
           }}
-          setUser={(u) => {
-            setUser(u);
-            localStorage.setItem("user", JSON.stringify(u));
-            localStorage.setItem("firstLogin", "true");
-          }}
-        />
-      )}
-
-      {showInterest && (
-        <InterestPopup
-          onClose={() => setShowInterest(false)}
-          user={user}
-          setUser={setUser}
         />
       )}
     </>

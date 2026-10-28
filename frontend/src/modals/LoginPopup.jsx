@@ -1,26 +1,28 @@
 import React, { useState } from "react";
 // ✅ 경로 수정: components/common
 import PopupLayout from "../components/common/PopupLayout";
-// ✅ API 수정: authAPI -> userAPI
-import { loginUser } from "../api/userAPI";
+import { useAuth } from "../auth/useAuth";
+import { authErrorMessage } from "../auth/authErrorMessage";
 
-export default function LoginPopup({ onClose, onSwitch, setUser }) {
+export default function LoginPopup({ onClose, onSwitch }) {
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setSubmitting(true);
 
     try {
-      const data = await loginUser(email, password);
-      // 로그인 성공 시
-      setUser(data.user);
-      localStorage.setItem("token", data.access_token);
+      await login({ email, password });
       onClose();
     } catch (err) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      setError(authErrorMessage(err));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -52,9 +54,10 @@ export default function LoginPopup({ onClose, onSwitch, setUser }) {
 
         <button
           type="submit"
-          className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition"
+          disabled={submitting}
+          className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition disabled:opacity-60"
         >
-          로그인
+          {submitting ? "로그인 중..." : "로그인"}
         </button>
 
         <p className="text-center text-sm text-gray-600 mt-2">

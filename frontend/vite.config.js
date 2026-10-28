@@ -16,5 +16,9 @@ export default defineConfig(({ mode }) => {
         '/api': { target: apiTarget, changeOrigin: false },
       },
     },
+    test: {
+      environment: 'jsdom',
+      include: ['src/**/*.test.{js,jsx}'],
+    },
   }
 })
