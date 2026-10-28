@@ -7,7 +7,16 @@ A retired row has no position, which frees the position for its replacement.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -15,6 +24,9 @@ from app.db.types import BigId, UtcDateTime, utc_now
 
 CATALOG_STATUSES = ("draft", "published", "retired")
 ACTIVITY_KINDS = ("reading", "video", "exercise", "external")
+# How a learner confirms an activity. Only the self-check button exists today;
+# the column lets stronger evidence (e.g. exercise submission) be added later.
+CONFIRMATION_TYPES = ("self_check",)
 
 
 def _in_list(column: str, values: tuple[str, ...]) -> str:
@@ -79,6 +91,9 @@ class LearningActivity(Base):
         CheckConstraint(_in_list("kind", ACTIVITY_KINDS), name="kind_valid"),
         CheckConstraint(_POSITIONED_UNLESS_RETIRED, name="position_required"),
         CheckConstraint("url IS NOT NULL OR body_md IS NOT NULL", name="has_content"),
+        CheckConstraint(
+            _in_list("confirmation_type", CONFIRMATION_TYPES), name="confirmation_valid"
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
@@ -92,6 +107,9 @@ class LearningActivity(Base):
     url: Mapped[str | None] = mapped_column(String(2048))
     body_md: Mapped[str | None] = mapped_column(Text)
     is_required: Mapped[bool] = mapped_column(Boolean)
+    confirmation_type: Mapped[str] = mapped_column(
+        String(20), default="self_check", server_default=text("'self_check'")
+    )
     status: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)

@@ -19,6 +19,14 @@ HEAD_TABLES = {
     "learning_tracks",
     "learning_units",
     "learning_activities",
+    "quizzes",
+    "quiz_questions",
+    "quiz_choices",
+    "quiz_attempts",
+    "quiz_attempt_answers",
+    "user_activity_records",
+    "user_unit_progress",
+    "xp_ledger",
 }
 
 

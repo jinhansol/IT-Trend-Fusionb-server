@@ -75,6 +75,14 @@ def alembic_config(connection: Connection) -> Config:
 
 
 TABLES_IN_DELETE_ORDER = (
+    "quiz_attempt_answers",
+    "user_unit_progress",
+    "user_activity_records",
+    "xp_ledger",
+    "quiz_attempts",
+    "quiz_choices",
+    "quiz_questions",
+    "quizzes",
     "learning_activities",
     "learning_units",
     "learning_tracks",
