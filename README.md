@@ -32,7 +32,7 @@ docker compose up -d --wait mariadb
 
 ```bash
 cd backend
-cp .env.example .env          # 이미 .env가 있다면 DATABASE_URL, TEST_DATABASE_URL 줄만 추가
+cp .env.example .env          # 이미 .env가 있다면 DATABASE_URL, TEST_DATABASE_URL, JWT_SECRET 줄만 추가
 uv sync
 uv run alembic upgrade head   # 스키마는 Alembic으로만 관리합니다
 uv run uvicorn app.main:create_app --factory --reload
@@ -41,6 +41,7 @@ uv run uvicorn app.main:create_app --factory --reload
 - 헬스체크: `GET http://127.0.0.1:8000/api/health` (프로세스), `GET /api/health/ready` (DB 연결)
 - API 문서(로컬만): `http://127.0.0.1:8000/api/docs`
 - 기존 백엔드(`backend/main.py`)는 별도 실행 경로이며 새 앱과 섞이지 않습니다.
+- 인증 API: `POST /api/auth/register`, `/login`, `/refresh`, `/logout`, `GET /api/me`. access token은 응답 본문(브라우저 메모리), refresh token은 httpOnly 쿠키(`/api/auth` 경로 전용)로 전달됩니다.
 
 ### 3) 테스트
 
@@ -59,10 +60,13 @@ uv run ruff check && uv run ruff format --check
 cd frontend
 npm ci
 npm run dev       # /api 요청은 Vite proxy로 새 백엔드(127.0.0.1:8000)에 전달
+npm test          # Vitest
 npm run build
 ```
 
-새 API 호출은 `src/api/client.js`를 사용합니다. 기존 화면의 API 모듈은 도메인별로 순차 전환합니다.
+새 API 호출은 `src/api/client.js`를 사용합니다. 로그인 상태는 `src/auth/AuthProvider.jsx`가 관리하며, 토큰을 localStorage에 저장하지 않습니다. 브라우저는 반드시 Vite 개발 서버(`http://localhost:5173`)로 접속해야 refresh 쿠키가 같은 출처로 동작합니다.
+
+전환 기간 안내: 기존 화면(Home·Dev·Career)의 API 모듈은 아직 옛 백엔드 주소(`localhost:8000`)를 직접 호출합니다. 새 백엔드를 8000에서 실행하면 기존 화면은 데이터를 불러오지 못합니다. 옛 화면을 함께 확인하려면 새 백엔드를 다른 포트(예: `--port 8001`)로 띄우고 `frontend/.env.local`에 `VITE_DEV_API_PROXY_TARGET=http://127.0.0.1:8001`을 지정하세요. 옛 화면은 옛 DB의 사용자 기준이라 새 로그인과 연결되지 않습니다.
 
 ---
 

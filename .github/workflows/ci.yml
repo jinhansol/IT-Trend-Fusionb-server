@@ -60,7 +60,7 @@ jobs:
         run: docker compose logs mariadb
 
   frontend:
-    name: Frontend (lint new code, build)
+    name: Frontend (lint new code, tests, build)
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -78,7 +78,13 @@ jobs:
 
       # The legacy screens still have known lint errors; only DevHub 2.0 files are enforced.
       - name: Lint DevHub 2.0 files
-        run: npx eslint src/api/client.js vite.config.js
+        run: >-
+          npx eslint vite.config.js src/main.jsx src/api/client.js src/api/client.test.js
+          src/api/auth.js src/auth src/components/common/HeaderNav.jsx
+          src/modals/LoginPopup.jsx src/modals/SignupPopup.jsx
+
+      - name: Unit tests (Vitest)
+        run: npm test
 
       - name: Lint everything (report only)
         continue-on-error: true
