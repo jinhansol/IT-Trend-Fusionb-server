@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "tags": ["python-3.x", "asyncio"], "owner": {"display_name": "Frank &amp; Co"},
+      "is_answered": true, "view_count": 1520, "answer_count": 3, "score": 27,
+      "creation_date": 1792900000, "question_id": 79000001,
+      "link": "https://stackoverflow.com/questions/79000001/why-does-asyncio-gather-hang",
+      "title": "Why does asyncio.gather &quot;hang&quot; with a semaphore?"
+    },
+    {
+      "tags": ["javascript", "reactjs"], "owner": {"display_name": "Grace"},
+      "is_answered": false, "view_count": 40, "answer_count": 0, "score": 0,
+      "creation_date": 1792910000, "question_id": 79000002,
+      "link": "https://stackoverflow.com/questions/79000002/usestate-not-updating",
+      "title": "useState not updating inside setInterval"
+    }
+  ],
+  "has_more": true, "quota_max": 300, "quota_remaining": 297
+}

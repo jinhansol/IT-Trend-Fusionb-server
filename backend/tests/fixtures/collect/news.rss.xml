@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Sample IT News</title>
+    <link>https://news.example.com/</link>
+    <description>sample</description>
+    <item>
+      <title>파이썬 3.14 출시, &amp;quot;free-threaded&amp;quot; 정식 지원</title>
+      <link>https://news.example.com/articles/1?utm_source=rss&amp;utm_medium=feed</link>
+      <guid isPermaLink="false">news-1</guid>
+      <description><![CDATA[<p>Python 3.14가 <b>정식</b> 출시됐다. 새 버전은 GIL 없는 빌드를 지원한다.</p><img src="x.png">]]></description>
+      <dc:creator>홍길동</dc:creator>
+      <pubDate>Tue, 27 Oct 2026 09:30:00 +0900</pubDate>
+      <category>개발</category>
+    </item>
+    <item>
+      <title>JavaScript 런타임 경쟁 가열</title>
+      <link>https://news.example.com/articles/2</link>
+      <guid>https://news.example.com/articles/2</guid>
+      <description>Deno와 Bun이 Node.js 호환성을 높이고 있다.</description>
+      <pubDate>Tue, 27 Oct 2026 08:00:00 +0900</pubDate>
+    </item>
+    <item>
+      <title>같은 기사 (추적 파라미터만 다름)</title>
+      <link>https://news.example.com/articles/1?utm_campaign=dup</link>
+      <guid>news-1-dup</guid>
+      <description>중복</description>
+    </item>
+    <item>
+      <title>링크 없는 항목은 건너뜀</title>
+      <description>no link</description>
+    </item>
+    <item>
+      <title>발행일 없는 보안 소식: 랜섬웨어 경보</title>
+      <link>https://news.example.com/articles/3</link>
+      <description>보안 업계가 새로운 랜섬웨어를 경고했다.</description>
+    </item>
+  </channel>
+</rss>

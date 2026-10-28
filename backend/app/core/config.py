@@ -53,6 +53,17 @@ class Settings(BaseSettings):
     # Stored on every ledger entry so later policy changes stay traceable.
     xp_policy_version: str = "2026-10-v1"
 
+    # Content collector (python -m app.jobs). Web requests never call external sites.
+    collector_user_agent: str = (
+        "DevHubCollector/2.0 (+https://github.com/jinhansol/IT-Trend-Fusionb-server)"
+    )
+    collector_timeout_seconds: float = Field(default=15, gt=0)
+    collector_max_response_bytes: int = Field(default=5_000_000, gt=0)
+    # Optional free Stack Exchange key: raises the daily quota from 300 to 10,000.
+    stackexchange_key: SecretStr | None = None
+    # A source with no successful run for this long is shown as delayed.
+    feed_stale_after_hours: int = Field(default=24, gt=0)
+
     @model_validator(mode="after")
     def _validate_environment(self) -> "Settings":
         url = self.parsed_database_url()

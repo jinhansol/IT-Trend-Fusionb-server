@@ -1,0 +1,14 @@
+[
+  {
+    "type_of": "article", "id": 1002, "title": "Why I moved from Java to Kotlin",
+    "description": "Notes after a year.", "url": "https://dev.to/bob/java-to-kotlin-1002",
+    "comments_count": 6, "public_reactions_count": 42, "published_at": "2026-10-26T08:30:00Z",
+    "tag_list": ["kotlin", "java"], "user": {"name": "Bob", "username": "bob"}
+  },
+  {
+    "type_of": "article", "id": 1003, "title": "React Server Components in practice",
+    "description": "What worked and what did not.", "url": "https://dev.to/carol/rsc-1003",
+    "comments_count": 12, "public_reactions_count": 250, "published_at": "2026-10-22T09:00:00Z",
+    "tag_list": ["react", "javascript", "webdev"], "user": {"name": "Carol", "username": "carol"}
+  }
+]

@@ -22,10 +22,17 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.8",
 ]
+jobs = [
+    "feedparser>=6.0.11",
+    "httpx>=0.27",
+]
 
 [tool.uv]
 # The legacy modules under backend/ are not a package; only app/ is ours.
 package = false
+# Collector-only libraries live in the "jobs" group so a web-only image can skip them
+# (uv sync --no-group jobs). Development and CI install both.
+default-groups = ["dev", "jobs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

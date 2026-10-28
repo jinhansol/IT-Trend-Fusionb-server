@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Sample Tech Blog</title>
+  <link href="https://blog.example.com/"/>
+  <updated>2026-10-26T10:00:00Z</updated>
+  <id>urn:example:blog</id>
+  <entry>
+    <title>쿠버네티스 위에서 Spring Boot 무중단 배포하기</title>
+    <link href="https://blog.example.com/posts/k8s-spring"/>
+    <id>urn:example:post:1</id>
+    <updated>2026-10-26T10:00:00Z</updated>
+    <author><name>김개발</name></author>
+    <summary type="html">&lt;p&gt;Kubernetes와 Spring Boot로 무중단 배포를 구성한 경험을 공유합니다.&lt;/p&gt;</summary>
+  </entry>
+</feed>
