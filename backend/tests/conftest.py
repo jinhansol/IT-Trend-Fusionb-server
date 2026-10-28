@@ -74,7 +74,14 @@ def alembic_config(connection: Connection) -> Config:
     return config
 
 
-AUTH_TABLES_IN_DELETE_ORDER = ("refresh_tokens", "user_settings", "users")
+TABLES_IN_DELETE_ORDER = (
+    "learning_activities",
+    "learning_units",
+    "learning_tracks",
+    "refresh_tokens",
+    "user_settings",
+    "users",
+)
 
 
 @pytest.fixture(scope="session")
@@ -89,9 +96,9 @@ def migrated_engine(test_engine: Engine) -> Engine:
 
 @pytest.fixture()
 def clean_db(migrated_engine: Engine) -> Iterator[Engine]:
-    """Empty the auth tables after the test. The engine was verified to point at
+    """Empty the application tables after the test. The engine was verified to point at
     the *_test database before any test ran."""
     yield migrated_engine
     with migrated_engine.begin() as connection:
-        for table in AUTH_TABLES_IN_DELETE_ORDER:
+        for table in TABLES_IN_DELETE_ORDER:
             connection.execute(text(f"DELETE FROM {table}"))

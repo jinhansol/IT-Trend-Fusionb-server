@@ -11,7 +11,15 @@ from tests.conftest import alembic_config
 pytestmark = pytest.mark.integration
 
 
-HEAD_TABLES = {"alembic_version", "users", "user_settings", "refresh_tokens"}
+HEAD_TABLES = {
+    "alembic_version",
+    "users",
+    "user_settings",
+    "refresh_tokens",
+    "learning_tracks",
+    "learning_units",
+    "learning_activities",
+}
 
 
 def _current_revision(connection) -> str | None:
