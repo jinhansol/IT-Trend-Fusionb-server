@@ -24,6 +24,9 @@ import app.db.base, app.db.safety, app.db.session, app.models
 import app.core.security, app.services.auth, app.api.routes.auth, app.api.routes.me
 import app.api.routes.learning, app.services.learning_catalog, app.content_loader.loader
 import app.api.routes.me_learning, app.services.learning_progress, app.services.rewards
+import app.api.routes.content, app.services.content_feed, app.services.tagging
+import app.content_loader.taxonomy, app.jobs.runner, app.jobs.store, app.jobs.__main__
+import app.integrations.http, app.integrations.sources
 from app.core.config import Settings
 
 settings = Settings(
@@ -58,6 +61,21 @@ def test_new_app_does_not_import_legacy_modules():
         "import sys, app.main\n"
         "legacy = {'main', 'database', 'routers', 'services', 'core', 'scheduler', 'schemas'}\n"
         "loaded = sorted(m for m in sys.modules if m.split('.')[0] in legacy)\n"
+        "assert not loaded, loaded\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], cwd=BACKEND_DIR, capture_output=True, text=True, timeout=60
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_web_app_does_not_load_the_collector():
+    """Collector-only code and libraries stay out of the web process."""
+    probe = (
+        "import sys, app.main\n"
+        "loaded = sorted(m for m in sys.modules\n"
+        "                if m.split('.')[0] in {'feedparser', 'httpx'}\n"
+        "                or m.startswith(('app.jobs', 'app.integrations')))\n"
         "assert not loaded, loaded\n"
     )
     result = subprocess.run(

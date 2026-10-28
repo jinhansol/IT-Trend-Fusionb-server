@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, health, learning, me, me_learning
+from app.api.routes import auth, content, health, learning, me, me_learning
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import REQUEST_ID_HEADER, RequestIdMiddleware, configure_logging
@@ -72,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(me.router)
     app.include_router(learning.router)
     app.include_router(me_learning.router)
+    app.include_router(content.router)
 
     logger.info(
         "DevHub API created (env=%s, database=%s)", settings.app_env, settings.database_name
