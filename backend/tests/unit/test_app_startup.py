@@ -22,6 +22,7 @@ import app.api.routes.health
 import app.core.config, app.core.errors, app.core.logging
 import app.db.base, app.db.safety, app.db.session, app.models
 import app.core.security, app.services.auth, app.api.routes.auth, app.api.routes.me
+import app.api.routes.learning, app.services.learning_catalog, app.content_loader.loader
 from app.core.config import Settings
 
 settings = Settings(
