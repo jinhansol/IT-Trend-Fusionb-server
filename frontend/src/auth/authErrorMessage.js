@@ -9,6 +9,8 @@ export function authErrorMessage(error) {
         ? `로그인 시도가 너무 많습니다. ${seconds}초 후 다시 시도해 주세요.`
         : "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.";
     }
+    case "TOO_MANY_REGISTRATIONS":
+      return "이 네트워크에서 가입 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.";
     case "EMAIL_ALREADY_REGISTERED":
       return "이미 가입된 이메일입니다.";
     case "VALIDATION_ERROR":

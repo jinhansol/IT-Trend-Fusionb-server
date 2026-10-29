@@ -5,6 +5,7 @@ import HeaderNav from "../components/common/HeaderNav";
 import CareerHomePage from "../pages/career/CareerHomePage";
 import TrackPage from "../pages/career/TrackPage";
 import UnitPage from "../pages/career/UnitPage";
+import SettingsPage from "../pages/settings/SettingsPage";
 
 
 export default function AppRouter() {
@@ -19,6 +20,7 @@ export default function AppRouter() {
         <Route path="/career" element={<CareerHomePage />} />
         <Route path="/career/:trackSlug" element={<TrackPage />} />
         <Route path="/career/:trackSlug/:unitSlug" element={<UnitPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
 
       </Routes>
     </BrowserRouter>

@@ -4,12 +4,11 @@ import { apiClient, refreshAccessToken, setAccessToken } from "./client";
 
 const NO_REFRESH = { skipAuthRefresh: true };
 
-export async function register({ email, password, displayName }) {
-  const { data } = await apiClient.post(
-    "/auth/register",
-    { email, password, display_name: displayName },
-    NO_REFRESH
-  );
+export async function register({ email, password, displayName, learnerType = null }) {
+  const body = { email, password, display_name: displayName };
+  // Optional: omitted when the user did not choose a type.
+  if (learnerType) body.learner_type = learnerType;
+  const { data } = await apiClient.post("/auth/register", body, NO_REFRESH);
   setAccessToken(data.access_token);
   return data.user;
 }
@@ -35,5 +34,5 @@ export async function restoreSession() {
 
 export async function fetchMe() {
   const { data } = await apiClient.get("/me");
-  return data; // { id, email, display_name, role, created_at, settings: { personalization_enabled } }
+  return data; // { id, email, display_name, role, created_at, settings: { personalization_enabled, learner_type } }
 }

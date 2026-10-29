@@ -65,6 +65,9 @@ export default function HeaderNav() {
                 <span>
                   Welcome, <strong>{user.display_name}</strong> 👋
                 </span>
+                <Link to="/settings" className="text-slate-600 hover:text-emerald-600">
+                  설정
+                </Link>
 
                 <button className="border px-3 py-1.5 rounded-md" onClick={handleLogout}>
                   Logout

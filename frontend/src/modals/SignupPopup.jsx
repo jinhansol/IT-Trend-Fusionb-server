@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import PopupLayout from "../components/common/PopupLayout";
 import { useAuth } from "../auth/useAuth";
 import { authErrorMessage } from "../auth/authErrorMessage";
+import LearnerTypePicker from "../components/learn/LearnerTypePicker";
 
 export default function SignupPopup({ onClose, onSwitch }) {
   const { register } = useAuth();
@@ -10,6 +11,7 @@ export default function SignupPopup({ onClose, onSwitch }) {
     email: "",
     password: "",
     displayName: "",
+    learnerType: null,
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -72,6 +74,10 @@ export default function SignupPopup({ onClose, onSwitch }) {
             required
           />
         </div>
+        <LearnerTypePicker
+          value={formData.learnerType}
+          onChange={(learnerType) => setFormData({ ...formData, learnerType })}
+        />
         {error && <p className="text-red-500 text-sm">{error}</p>}
 
         <button

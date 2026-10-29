@@ -7,6 +7,7 @@ import { useApiResource } from "../../hooks/useApiResource";
 import { useMyResource } from "../../hooks/useMyResource";
 import LoadState from "../../components/learn/LoadState";
 import LoginPrompt from "../../components/learn/LoginPrompt";
+import StartGuide from "../../components/learn/StartGuide";
 import { ProgressBar, XpBar } from "../../components/learn/ProgressBits";
 
 // Career hub. Phase 6 adds personalization and the AI career compass, Phase 7 the roadmap graph.
@@ -92,13 +93,15 @@ function TrackCard({ track }) {
 }
 
 export default function CareerHomePage() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const state = useApiResource(fetchTracks, []);
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-10 text-left">
       <h1 className="text-3xl font-extrabold mb-2">Career</h1>
       <p className="text-slate-500 mb-8">원하는 트랙, 원하는 단원부터 자유롭게 시작하세요.</p>
+
+      {status !== "loading" && <StartGuide learnerType={user?.settings?.learner_type ?? null} />}
 
       <div className="mb-10">
         {status === "authenticated" && <MyStatus />}
@@ -107,7 +110,7 @@ export default function CareerHomePage() {
         )}
       </div>
 
-      <h2 className="text-xl font-bold mb-4">학습 트랙</h2>
+      <h2 id="learning-tracks" className="text-xl font-bold mb-4 scroll-mt-24">학습 트랙</h2>
 
       {state.status !== "ready" ? (
         <LoadState state={state} />
