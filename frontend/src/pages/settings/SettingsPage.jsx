@@ -3,6 +3,7 @@ import { updateLearnerType } from "../../api/settings";
 import { useAuth } from "../../auth/useAuth";
 import LearnerTypePicker from "../../components/learn/LearnerTypePicker";
 import LoginPrompt from "../../components/learn/LoginPrompt";
+import PersonalizationSettings from "../../components/settings/PersonalizationSettings";
 
 function LearnerTypeForm({ current, onSaved }) {
   const [value, setValue] = useState(current);
@@ -50,13 +51,16 @@ export default function SettingsPage() {
       {status === "loading" && <p className="text-slate-400">불러오는 중...</p>}
       {status === "anonymous" && <LoginPrompt message="설정은 로그인한 뒤 바꿀 수 있어요." />}
       {status === "authenticated" && (
-        <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-          <h2 className="font-bold mb-1">학습자 유형</h2>
-          <p className="text-sm text-slate-500 mb-4">Career 첫 화면의 시작 안내가 바뀝니다. 학습 기록과 XP에는 영향이 없어요.</p>
-          {/* Not keyed by the saved value: reloading the user after a save must keep
-              the form (and its "저장했습니다." message) on screen. */}
-          <LearnerTypeForm current={user.settings?.learner_type ?? null} onSaved={reloadUser} />
-        </section>
+        <div className="space-y-6">
+          <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+            <h2 className="font-bold mb-1">학습자 유형</h2>
+            <p className="text-sm text-slate-500 mb-4">Career 첫 화면의 시작 안내가 바뀝니다. 학습 기록과 XP에는 영향이 없어요.</p>
+            {/* Not keyed by the saved value: reloading the user after a save must keep
+                the form (and its "저장했습니다." message) on screen. */}
+            <LearnerTypeForm current={user.settings?.learner_type ?? null} onSaved={reloadUser} />
+          </section>
+          <PersonalizationSettings onSwitchChanged={reloadUser} />
+        </div>
       )}
     </main>
   );

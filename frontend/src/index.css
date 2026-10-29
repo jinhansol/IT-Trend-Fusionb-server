@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* The header is sticky: keep elements scrolled into view (keyboard focus, anchors)
+   below it instead of underneath it. */
+html {
+  scroll-padding-top: 5rem;
+}
