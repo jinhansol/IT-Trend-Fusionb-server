@@ -51,13 +51,17 @@ uv run uvicorn app.main:create_app --factory --reload
 
 ```bash
 cd backend
+uv run python -m app.content_loader technologies content/technologies.yaml   # 먼저: 단원이 기술을 참조합니다
 uv run python -m app.content_loader load content/python --dry-run   # 바뀔 내용만 확인
 uv run python -m app.content_loader load content/python             # DB에 반영
 ```
 
+반영 순서: **기술 분류(`technologies`) → 수집 소스(`sources`) → 트랙(`load`)**
+
 - 같은 파일을 여러 번 반영해도 결과가 같습니다. 파일에서 지운 단원·활동은 삭제되지 않고 `retired`(비공개) 처리됩니다.
 - 형식 오류(중복 slug·순서, 필수 항목 누락, http(s)가 아닌 링크, 렌더링되지 않는 굵게 표시 등)가 있으면 아무것도 반영하지 않습니다.
 - 이미지·동영상은 저장소에 넣지 않고 외부 링크로 연결합니다.
+- 단원 파일의 `technologies: [python]`에 그 단원이 다루는 기술(`content/technologies.yaml`의 slug)을 적을 수 있습니다(선택, 최대 10개). 없는 기술이나 `retired` 기술을 적으면 트랙 전체를 반영하지 않습니다. 다시 반영하면 파일 내용으로 연결이 맞춰집니다.
 - 단원 파일의 `quiz:`에 문항과 정답·해설을 적습니다(문항 1~30개, 기본 통과 기준 80%). 퀴즈가 없는 단원은 완료할 수 없습니다. 이미 응시 기록이 있는 퀴즈를 고치면 새 버전이 만들어지고, 이미 완료한 단원은 완료 상태가 유지됩니다.
 
 ### 학습 진행·보상 규칙
@@ -85,6 +89,8 @@ uv run python -m app.jobs collect --source devto     # 특정 소스만
 - 같은 글은 다시 수집해도 한 번만 저장되고 지표만 갱신됩니다. 같은 소스를 동시에 두 번 실행하면 하나는 `skipped`로 기록됩니다.
 - 실행 결과는 `job_runs`에 남고, 화면의 "마지막 갱신"과 지연 표시는 여기서 계산합니다. 한 소스가 실패해도 다른 소스는 계속 수집됩니다.
 - 기술 태그는 `content/technologies.yaml`의 별칭으로 붙습니다(단어 단위 일치라 "java"가 "javascript"에 붙지 않음).
+- 여러 매체가 같은 기사(정규화한 URL이 같은 글)를 실으면 소스마다 한 번씩 저장되고, **Home 목록과 언급량에서만** 하나로 묶습니다. 대표 글은 발행 시각이 있는 글 중 발행 시각이 가장 이른 것(묶인 글 모두 발행 시각이 없으면 수집 시각이 가장 이른 것, 같으면 소스 순서·id 순)이며, 화면의 제목·매체·날짜는 모두 대표 글의 것입니다. 기술 필터는 묶인 글 전체의 태그를 함께 보지만, 이는 태그 일치일 뿐 기사와 기술의 관련성을 검증한 것은 아닙니다. Dev는 묶지 않습니다.
+- `GET /api/technologies/{slug}/units`: 그 기술을 다루는 공개 Career 단원 목록. Home·Dev에서 사용자가 기술 필터를 고르면 "관련 학습"으로, 단원 화면에서는 그 기술의 IT 뉴스·Dev 글 링크로 연결합니다(기술 단위 연결이며 개별 기사와 단원의 관련성을 뜻하지 않음).
 - Stack Exchange 무료 키가 있으면 `STACKEXCHANGE_KEY`에 넣으세요(하루 호출 한도 300 → 10,000). 없어도 동작합니다.
 - 수집 전용 라이브러리는 `jobs` 의존성 그룹에 있습니다(웹 전용 설치: `uv sync --no-group jobs`).
 
