@@ -31,3 +31,9 @@ export async function fetchFeedStatus(scope) {
   const { data } = await apiClient.get("/feed-status", { params: { scope } });
   return data; // { scope, last_updated_at, stale, sources }
 }
+
+/** Published Career units that teach a technology (technology-level link). */
+export async function fetchTechnologyUnits(slug) {
+  const { data } = await apiClient.get(`/technologies/${seg(slug)}/units`);
+  return data; // { technology: { slug, name }, units: [{ track, slug, position, title, ... }] }
+}

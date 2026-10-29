@@ -1,15 +1,16 @@
-import { useState } from "react";
 import { fetchNews, fetchTrends } from "../../api/content";
 import { useApiResource } from "../../hooks/useApiResource";
 import { usePagedList } from "../../hooks/usePagedList";
 import FeedList from "../../components/feed/FeedList";
 import FeedUpdated from "../../components/feed/FeedUpdated";
+import RelatedLearning from "../../components/feed/RelatedLearning";
+import { useTechParam } from "../../hooks/useTechParam";
 import TechFilter from "../../components/feed/TechFilter";
 import { DailyTrend, RankBars } from "../../components/feed/TrendCharts";
 
 // DevHub 2.0 Home: IT news collected from RSS feeds, and what they talk about.
 export default function HomePage() {
-  const [tech, setTech] = useState(null);
+  const [tech, setTech] = useTechParam();
   const trends = useApiResource(() => fetchTrends("news", 7), []);
   const news = usePagedList((page) => fetchNews({ page, size: 12, tech }), [tech]);
   const report = trends.status === "ready" ? trends.data : null;
@@ -29,6 +30,7 @@ export default function HomePage() {
           <TechFilter technologies={[...report.fields, ...report.technologies].slice(0, 12)} value={tech} onChange={setTech} />
         </div>
       )}
+      <RelatedLearning tech={tech} />
       <FeedList list={news} emptyText={tech ? "이 기술에 관한 기사가 아직 없습니다." : "아직 수집된 기사가 없습니다."} />
 
       <section className="mt-16" aria-labelledby="news-trends">

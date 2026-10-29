@@ -4,6 +4,8 @@ import { useApiResource } from "../../hooks/useApiResource";
 import { usePagedList } from "../../hooks/usePagedList";
 import FeedList from "../../components/feed/FeedList";
 import FeedUpdated from "../../components/feed/FeedUpdated";
+import RelatedLearning from "../../components/feed/RelatedLearning";
+import { useTechParam } from "../../hooks/useTechParam";
 import TechFilter from "../../components/feed/TechFilter";
 import { RankBars } from "../../components/feed/TrendCharts";
 
@@ -98,7 +100,7 @@ export default function DevPage() {
   const channels = useApiResource(fetchDevChannels, []);
   const trends = useApiResource(() => fetchTrends("dev", 7), []);
   const [selected, setSelected] = useState(null);
-  const [tech, setTech] = useState(null);
+  const [tech, setTech] = useTechParam();
   const report = trends.status === "ready" ? trends.data : null;
 
   const list = channels.status === "ready" ? channels.data : [];
@@ -119,6 +121,7 @@ export default function DevPage() {
           <TechFilter technologies={report.technologies} value={tech} onChange={setTech} />
         </div>
       )}
+      <RelatedLearning tech={tech} />
 
       {channels.status === "loading" && <p className="text-slate-400 py-10 text-center">불러오는 중...</p>}
       {channels.status === "error" && (

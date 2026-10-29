@@ -1,5 +1,10 @@
 // Technology filter chips. One row, scrolls sideways on small screens.
 export default function TechFilter({ technologies, value, onChange }) {
+  // A filter that came from a link (e.g. a Career unit) may not be among the current
+  // top technologies; keep it visible so it can be cleared.
+  if (value && !technologies.some((t) => t.slug === value)) {
+    technologies = [{ slug: value, name: value }, ...technologies];
+  }
   if (!technologies.length) return null;
   const chip = (active) =>
     `shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold border transition ${

@@ -116,6 +116,27 @@ function ProgressHeader({ progress }) {
   );
 }
 
+/** Links from the unit's technologies to the matching Home news and Dev posts. */
+function UnitTechnologies({ technologies }) {
+  if (!technologies?.length) return null;
+  const query = (slug) => `?tech=${encodeURIComponent(slug)}`;
+  return (
+    <section aria-label="관련 기술" className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+      {technologies.map((tech) => (
+        <span key={tech.slug} className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-100">
+          <span className="font-semibold text-slate-700">{tech.name}</span>
+          <Link to={`/${query(tech.slug)}`} className="text-indigo-600 hover:underline">
+            IT 뉴스
+          </Link>
+          <Link to={`/dev${query(tech.slug)}`} className="text-indigo-600 hover:underline">
+            Dev 글
+          </Link>
+        </span>
+      ))}
+    </section>
+  );
+}
+
 function RewardBanner({ reward }) {
   const gained = reward.granted_rewards.reduce((sum, r) => sum + r.amount, 0);
   return (
@@ -190,6 +211,7 @@ export default function UnitPage() {
       {unit.estimated_minutes && (
         <p className="text-xs text-slate-500 mt-2">예상 학습 시간 약 {unit.estimated_minutes}분</p>
       )}
+      <UnitTechnologies technologies={unit.technologies} />
       {detail && <ProgressHeader progress={detail.progress} />}
       {progressFailed && <p className="text-sm text-rose-600 mt-4">내 학습 기록을 불러오지 못했습니다.</p>}
       {reward && <RewardBanner reward={reward} />}
