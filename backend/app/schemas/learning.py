@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from app.schemas.content import TechnologyRef
+
 
 class TrackSummary(BaseModel):
     slug: str
@@ -67,3 +69,22 @@ class UnitDetail(BaseModel):
     next: UnitRef | None
     # None when the unit has no quiz yet (it can be studied but not completed).
     quiz: UnitQuizSummary | None = None
+    # Technologies the unit teaches, as written in its content file (P2).
+    technologies: list[TechnologyRef] = []
+
+
+class TechnologyUnit(BaseModel):
+    track: TrackRef
+    slug: str
+    position: int
+    title: str
+    summary: str | None
+    estimated_minutes: int | None
+
+
+class TechnologyUnits(BaseModel):
+    """Published units that teach a technology: a technology-level link, not a
+    statement that a specific article or post is about the unit's topic."""
+
+    technology: TechnologyRef
+    units: list[TechnologyUnit]

@@ -2,12 +2,16 @@
 
 Lists are ordered by publish time (collection time when a feed gives none).
 Retired sources are hidden; paused sources keep showing what was collected.
+
+Home news is de-duplicated (A-plan v0.2, C-4): rows with the same normalized URL
+hash from different news sources form one group, shown once through a
+representative row. Dev lists are not de-duplicated.
 """
 
 from datetime import timedelta
 
-from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import Select, distinct, func, select
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -79,18 +83,27 @@ def _item(content: Content) -> ContentItem:
     )
 
 
-def _page(db: Session, query: Select, order_by, page: int, size: int) -> ContentPage:
+def _page(
+    db: Session, query: Select, order_by, page: int, size: int, technologies_for=None
+) -> ContentPage:
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    rows = db.scalars(
-        query.options(
-            selectinload(Content.source),
-            selectinload(Content.technologies).selectinload(ContentTechnology.technology),
+    rows = list(
+        db.scalars(
+            query.options(
+                selectinload(Content.source),
+                selectinload(Content.technologies).selectinload(ContentTechnology.technology),
+            )
+            .order_by(*order_by)
+            .limit(size)
+            .offset((page - 1) * size)
         )
-        .order_by(*order_by)
-        .limit(size)
-        .offset((page - 1) * size)
     )
-    return ContentPage(items=[_item(c) for c in rows], page=page, size=size, total=total)
+    items = [_item(c) for c in rows]
+    if technologies_for is not None:
+        overrides = technologies_for(rows)
+        for item in items:
+            item.technologies = overrides.get(item.id, item.technologies)
+    return ContentPage(items=items, page=page, size=size, total=total)
 
 
 def _with_technology(query: Select, tech: str | None) -> Select:
@@ -104,10 +117,80 @@ def _with_technology(query: Select, tech: str | None) -> Select:
     )
 
 
+# --- Home news de-duplication ------------------------------------------------------------
+#
+# Representative of a group (deterministic):
+#   1. rows that carry a real publish time before rows that only have a collection time,
+#   2. earlier publish time, 3. earlier collection time,
+#   4. earlier position in content/sources.yaml, 5. smaller id.
+# Publish and collection times are separate columns, so they are never compared with
+# each other. The card shows the representative's title, link, source and date.
+
+
+def _news_representatives() -> Select:
+    rank = func.row_number().over(
+        partition_by=Content.url_hash,
+        order_by=(
+            Content.published_at.is_(None),
+            Content.published_at,
+            Content.collected_at,
+            ContentSource.position,
+            Content.id,
+        ),
+    )
+    ranked = (
+        select(Content.id.label("id"), rank.label("rn"))
+        .join(ContentSource, ContentSource.id == Content.source_id)
+        .where(_visible_sources("news"))
+        .subquery()
+    )
+    return select(ranked.c.id).where(ranked.c.rn == 1)
+
+
+def _news_member_tags():
+    """(url_hash, technology) pairs over every visible news row: the union of a group's
+    tags. A union only says "some copy mentions it", not a verified relevance."""
+    return (
+        select(Content.url_hash, Technology.slug, Technology.name)
+        .join(ContentSource, ContentSource.id == Content.source_id)
+        .join(ContentTechnology, ContentTechnology.content_id == Content.id)
+        .join(Technology, Technology.id == ContentTechnology.technology_id)
+        .where(_visible_sources("news"), Technology.status == "published")
+    )
+
+
+def _news_group_technologies(db: Session, rows: list[Content]) -> dict[int, list[TechnologyRef]]:
+    by_hash: dict[str, dict[str, str]] = {}
+    hashes = [row.url_hash for row in rows]
+    if hashes:
+        for url_hash, slug, name in db.execute(
+            _news_member_tags().where(Content.url_hash.in_(hashes))
+        ):
+            by_hash.setdefault(url_hash, {})[slug] = name
+    return {
+        row.id: sorted(
+            (TechnologyRef(slug=s, name=n) for s, n in by_hash.get(row.url_hash, {}).items()),
+            key=lambda t: t.name.lower(),
+        )
+        for row in rows
+    }
+
+
 def list_news(db: Session, page: int, size: int, tech: str | None) -> ContentPage:
-    query = select(Content).join(ContentSource).where(_visible_sources("news"))
+    query = select(Content).where(Content.id.in_(_news_representatives()))
+    if tech is not None:
+        # A group matches when any of its copies is tagged with the technology.
+        tagged = (
+            _news_member_tags().where(Technology.slug == tech).with_only_columns(Content.url_hash)
+        )
+        query = query.where(Content.url_hash.in_(tagged))
     return _page(
-        db, _with_technology(query, tech), (Content.sort_at.desc(), Content.id.desc()), page, size
+        db,
+        query,
+        (Content.sort_at.desc(), Content.id.desc()),
+        page,
+        size,
+        technologies_for=lambda rows: _news_group_technologies(db, rows),
     )
 
 
@@ -152,6 +235,8 @@ def list_channel_posts(
 
 
 def trends(db: Session, scope: str, days: int) -> TrendReport:
+    if scope == "news":
+        return _news_trends(db, days)
     since = utc_now() - timedelta(days=days)
     in_scope = (
         select(Content.id)
@@ -167,9 +252,9 @@ def trends(db: Session, scope: str, days: int) -> TrendReport:
         .group_by(Technology.id)
         .order_by(func.count().desc(), Technology.name)
     ).all()
-    fields = [CountItem(slug=s, name=n, count=c) for s, n, kind, c in counts if kind == "field"]
-    techs = [CountItem(slug=s, name=n, count=c) for s, n, kind, c in counts if kind != "field"]
-    top = techs[:DAILY_TECHNOLOGIES]
+    top = [CountItem(slug=s, name=n, count=c) for s, n, kind, c in counts if kind != "field"][
+        :DAILY_TECHNOLOGIES
+    ]
 
     day = func.date(Content.sort_at)
     per_day = dict(
@@ -186,6 +271,55 @@ def trends(db: Session, scope: str, days: int) -> TrendReport:
         ):
             per_day_tech.setdefault(str(date), {})[slug] = count
 
+    return _trend_report(scope, days, total, counts, per_day, per_day_tech)
+
+
+def _news_trends(db: Session, days: int) -> TrendReport:
+    """Home news counts per group (DISTINCT url_hash), matching the de-duplicated list.
+    A group belongs to the day of its representative row."""
+    since = utc_now() - timedelta(days=days)
+    reps = select(Content.id).where(
+        Content.id.in_(_news_representatives()), Content.sort_at >= since
+    )
+    total = db.scalar(select(func.count()).select_from(reps.subquery()))
+
+    rep = aliased(Content)
+    member_tags = _news_member_tags().subquery()
+    group_tags = (
+        select(rep.url_hash, rep.sort_at, member_tags.c.slug, member_tags.c.name)
+        .join(member_tags, member_tags.c.url_hash == rep.url_hash)
+        .where(rep.id.in_(reps))
+        .subquery()
+    )
+    groups = func.count(distinct(group_tags.c.url_hash))
+    counts = db.execute(
+        select(group_tags.c.slug, group_tags.c.name, Technology.kind, groups)
+        .join(Technology, Technology.slug == group_tags.c.slug)
+        .group_by(group_tags.c.slug, group_tags.c.name, Technology.kind)
+        .order_by(groups.desc(), group_tags.c.name)
+    ).all()
+    top = [slug for slug, _name, kind, _count in counts if kind != "field"][:DAILY_TECHNOLOGIES]
+
+    day = func.date(Content.sort_at)
+    per_day = dict(
+        db.execute(select(day, func.count()).where(Content.id.in_(reps)).group_by(day)).all()
+    )
+    per_day_tech: dict[str, dict[str, int]] = {}
+    if top:
+        tag_day = func.date(group_tags.c.sort_at)
+        for date, slug, count in db.execute(
+            select(tag_day, group_tags.c.slug, func.count(distinct(group_tags.c.url_hash)))
+            .where(group_tags.c.slug.in_(top))
+            .group_by(tag_day, group_tags.c.slug)
+        ):
+            per_day_tech.setdefault(str(date), {})[slug] = count
+    return _trend_report("news", days, total, counts, per_day, per_day_tech)
+
+
+def _trend_report(scope, days, total, counts, per_day, per_day_tech) -> TrendReport:
+    fields = [CountItem(slug=s, name=n, count=c) for s, n, kind, c in counts if kind == "field"]
+    techs = [CountItem(slug=s, name=n, count=c) for s, n, kind, c in counts if kind != "field"]
+    top = techs[:DAILY_TECHNOLOGIES]
     today = utc_now().date()
     daily = []
     for offset in range(days - 1, -1, -1):

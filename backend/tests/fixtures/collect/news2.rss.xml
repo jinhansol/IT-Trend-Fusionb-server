@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Second Sample News</title>
+    <link>https://news2.example.com/</link>
+    <description>A second outlet that republishes some of the same links (P2 de-duplication tests).</description>
+    <item>
+      <title>파이썬 3.14 출시 (제휴 기사)</title>
+      <link>https://news.example.com/articles/1?utm_source=partner</link>
+      <guid>n2-1</guid>
+      <description>Kubernetes 환경에서도 새 버전을 쓸 수 있다.</description>
+      <pubDate>Mon, 26 Oct 2026 23:00:00 +0900</pubDate>
+    </item>
+    <item>
+      <title>JavaScript 런타임 경쟁 (전재)</title>
+      <link>https://news.example.com/articles/2</link>
+      <guid>n2-2</guid>
+      <description>발행 시각이 없는 전재 기사.</description>
+    </item>
+    <item>
+      <title>보안 경보 (전재)</title>
+      <link>https://news.example.com/articles/3</link>
+      <guid>n2-3</guid>
+      <description>보안 업계 소식.</description>
+    </item>
+    <item>
+      <title>Rust 2027 에디션 미리보기</title>
+      <link>https://other.example.com/rust-2027</link>
+      <guid>n2-4</guid>
+      <description>Rust 다음 에디션.</description>
+      <pubDate>Sun, 25 Oct 2026 10:00:00 +0900</pubDate>
+    </item>
+  </channel>
+</rss>

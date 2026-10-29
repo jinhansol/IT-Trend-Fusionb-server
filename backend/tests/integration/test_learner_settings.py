@@ -172,6 +172,7 @@ def test_public_content_is_identical_for_every_learner_type(make_client, clean_d
         "/api/tracks/py",
         "/api/tracks/py/units/one",
         "/api/tracks/py/units/one/quiz",
+        "/api/technologies/python/units",
     ]
 
     def snapshot(with_token):

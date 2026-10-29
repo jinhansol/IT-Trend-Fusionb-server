@@ -4,10 +4,19 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import AppError
-from app.models.learning import LearningActivity, LearningTrack, LearningUnit
+from app.models.content import Technology
+from app.models.learning import (
+    LearningActivity,
+    LearningTrack,
+    LearningUnit,
+    LearningUnitTechnology,
+)
 from app.models.quiz import Quiz, QuizQuestion
+from app.schemas.content import TechnologyRef
 from app.schemas.learning import (
     ActivityOut,
+    TechnologyUnit,
+    TechnologyUnits,
     TrackDetail,
     TrackListResponse,
     TrackRef,
@@ -28,6 +37,14 @@ class TrackNotFound(AppError):
 
     def __init__(self) -> None:
         super().__init__("Track not found")
+
+
+class TechnologyNotFound(AppError):
+    status_code = 404
+    code = "TECHNOLOGY_NOT_FOUND"
+
+    def __init__(self) -> None:
+        super().__init__("Technology not found")
 
 
 class UnitNotFound(AppError):
@@ -133,6 +150,7 @@ def get_unit(db: Session, track_slug: str, unit_slug: str) -> UnitDetail:
 
     return UnitDetail(
         quiz=_quiz_summary(db, unit.id),
+        technologies=_unit_technologies(db, unit.id),
         slug=unit.slug,
         position=unit.position,
         title=unit.title,
@@ -154,6 +172,50 @@ def get_unit(db: Session, track_slug: str, unit_slug: str) -> UnitDetail:
         ],
         prev=ref(index - 1),
         next=ref(index + 1),
+    )
+
+
+def _unit_technologies(db: Session, unit_id: int) -> list[TechnologyRef]:
+    rows = db.execute(
+        select(Technology.slug, Technology.name)
+        .join(LearningUnitTechnology, LearningUnitTechnology.technology_id == Technology.id)
+        .where(LearningUnitTechnology.unit_id == unit_id, Technology.status == PUBLISHED)
+        .order_by(Technology.name)
+    ).all()
+    return [TechnologyRef(slug=slug, name=name) for slug, name in rows]
+
+
+def get_technology_units(db: Session, technology_slug: str) -> TechnologyUnits:
+    """Published units that teach a published technology, in catalog order."""
+    technology = db.scalar(
+        select(Technology).where(Technology.slug == technology_slug, Technology.status == PUBLISHED)
+    )
+    if technology is None:
+        raise TechnologyNotFound()
+    rows = db.execute(
+        select(LearningUnit, LearningTrack)
+        .join(LearningUnitTechnology, LearningUnitTechnology.unit_id == LearningUnit.id)
+        .join(LearningTrack, LearningTrack.id == LearningUnit.track_id)
+        .where(
+            LearningUnitTechnology.technology_id == technology.id,
+            LearningUnit.status == PUBLISHED,
+            LearningTrack.status == PUBLISHED,
+        )
+        .order_by(LearningTrack.position, LearningUnit.position)
+    ).all()
+    return TechnologyUnits(
+        technology=TechnologyRef(slug=technology.slug, name=technology.name),
+        units=[
+            TechnologyUnit(
+                track=TrackRef(slug=track.slug, title=track.title),
+                slug=unit.slug,
+                position=unit.position,
+                title=unit.title,
+                summary=unit.summary,
+                estimated_minutes=unit.estimated_minutes,
+            )
+            for unit, track in rows
+        ],
     )
 
 
