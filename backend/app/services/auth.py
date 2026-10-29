@@ -61,6 +61,18 @@ class TooManyAttempts(AppError):
         )
 
 
+class TooManyRegistrations(AppError):
+    status_code = 429
+    code = "TOO_MANY_REGISTRATIONS"
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__(
+            "Too many sign-ups from this network. Try again later.",
+            details={"retry_after": retry_after},
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 class RefreshTokenInvalid(AppError):
     status_code = 401
     code = "REFRESH_TOKEN_INVALID"
@@ -96,6 +108,7 @@ def register_user(
     password: str,
     display_name: str,
     user_agent: str | None,
+    learner_type: str | None = None,
 ) -> IssuedTokens:
     password_hash = hash_password(password)  # slow; keep it outside the transaction
     try:
@@ -106,7 +119,7 @@ def register_user(
                 display_name=display_name,
                 last_login_at=utc_now(),
             )
-            user.user_settings = UserSettings()
+            user.user_settings = UserSettings(learner_type=learner_type)
             db.add(user)
             db.flush()
             refresh_token, _ = _issue_refresh_token(

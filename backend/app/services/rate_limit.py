@@ -35,6 +35,10 @@ class FailedAttemptLimiter:
             wait = failures[0] + self.window_seconds - self._clock()
             return max(1, math.ceil(wait))
 
+    def record(self, key: str) -> None:
+        """Count one attempt (for limits on every attempt, not only failures)."""
+        self.record_failure(key)
+
     def record_failure(self, key: str) -> None:
         with self._lock:
             if len(self._failures) >= _MAX_TRACKED_KEYS:

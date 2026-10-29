@@ -59,6 +59,14 @@ def register(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AuthResponse:
+    # Every attempt counts (also duplicates), so one network cannot mass-create accounts.
+    limiter = request.app.state.register_limiter
+    client_ip = _client_ip(request)
+    retry_after = limiter.retry_after(client_ip)
+    if retry_after is not None:
+        raise auth_service.TooManyRegistrations(retry_after)
+    limiter.record(client_ip)
+
     issued = auth_service.register_user(
         db,
         settings,
@@ -66,6 +74,7 @@ def register(
         password=body.password,
         display_name=body.display_name,
         user_agent=request.headers.get("user-agent"),
+        learner_type=body.learner_type,
     )
     _set_refresh_cookie(response, settings, issued.refresh_token)
     return _auth_response(issued)

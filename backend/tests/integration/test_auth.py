@@ -247,7 +247,8 @@ def test_each_user_only_sees_their_own_profile(make_client, clean_db):
 
     assert (me_alice["id"], me_alice["email"]) == (alice["user"]["id"], "alice@example.com")
     assert (me_bob["id"], me_bob["email"]) == (bob["user"]["id"], "bob@example.com")
-    assert me_alice["settings"] == {"personalization_enabled": False}
+    # P1 added learner_type; NULL until the user picks one.
+    assert me_alice["settings"] == {"personalization_enabled": False, "learner_type": None}
     assert set(me_alice) == {"id", "email", "display_name", "role", "created_at", "settings"}
 
 

@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.schemas.user import UserPublic
+from app.schemas.user import LearnerType, UserPublic
 
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
@@ -14,6 +14,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr = Field(max_length=255)
     password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
     display_name: str = Field(min_length=1, max_length=DISPLAY_NAME_MAX_LENGTH)
+    # Optional: older clients that do not send it keep working.
+    learner_type: LearnerType | None = None
 
     @field_validator("display_name", mode="before")
     @classmethod

@@ -54,6 +54,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.login_limiter = FailedAttemptLimiter(
         settings.login_rate_limit_attempts, settings.login_rate_limit_window_seconds
     )
+    app.state.register_limiter = FailedAttemptLimiter(
+        settings.register_rate_limit_attempts, settings.register_rate_limit_window_seconds
+    )
 
     if settings.cors_origins:
         app.add_middleware(

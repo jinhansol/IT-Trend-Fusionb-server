@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     refresh_cookie_secure: bool | None = None
     login_rate_limit_attempts: int = Field(default=10, gt=0)
     login_rate_limit_window_seconds: int = Field(default=600, gt=0)
+    # Registrations per client IP. Kept in process memory like the login limiter:
+    # each worker counts separately, counts reset on restart, and users behind one
+    # shared IP (office, school, mobile carrier NAT) share the limit.
+    register_rate_limit_attempts: int = Field(default=5, gt=0)
+    register_rate_limit_window_seconds: int = Field(default=3600, gt=0)
 
     # Rewards (D04). XP is a reward record, not a skill assessment.
     xp_per_unit_completion: int = Field(default=100, gt=0)
