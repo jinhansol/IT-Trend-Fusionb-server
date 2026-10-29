@@ -27,6 +27,9 @@ import app.api.routes.me_learning, app.services.learning_progress, app.services.
 import app.api.routes.content, app.services.content_feed, app.services.tagging
 import app.content_loader.taxonomy, app.jobs.runner, app.jobs.store, app.jobs.__main__
 import app.integrations.http, app.integrations.sources
+import app.api.routes.careers, app.api.routes.me_careers, app.api.routes.me_goals
+import app.services.career_catalog, app.services.career_candidates, app.services.learning_goals
+import app.services.transactions, app.content_loader.careers
 from app.core.config import Settings
 
 settings = Settings(

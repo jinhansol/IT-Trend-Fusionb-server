@@ -10,12 +10,8 @@ plain reads made after the lock would still see the snapshot taken before it and
 miss rows a concurrent transaction committed while we waited.
 """
 
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
-
 from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
@@ -41,12 +37,11 @@ from app.schemas.progress import (
 )
 from app.services import rewards
 from app.services.learning_catalog import TrackNotFound, UnitNotFound
+from app.services.transactions import with_retry as _with_retry
+from app.services.transactions import write_transaction as _write_transaction
 
 PUBLISHED = "published"
 UNIT_COMPLETED = "unit_completed"
-# MariaDB: deadlock / lock wait timeout. Safe to retry the whole transaction.
-_RETRYABLE_ERRORS = (1213, 1205)
-_MAX_ATTEMPTS = 3
 
 
 class ActivityNotFound(AppError):
@@ -87,24 +82,6 @@ class InvalidAnswer(AppError):
 
 
 # --- helpers ----------------------------------------------------------------------------
-
-
-def _with_retry[T](operation: Callable[[], T]) -> T:
-    for attempt in range(1, _MAX_ATTEMPTS + 1):
-        try:
-            return operation()
-        except OperationalError as exc:
-            code = getattr(exc.orig, "args", (None,))[0]
-            if code not in _RETRYABLE_ERRORS or attempt == _MAX_ATTEMPTS:
-                raise
-    raise AssertionError("unreachable")
-
-
-@contextmanager
-def _write_transaction(db: Session) -> Iterator[None]:
-    with db.begin():
-        db.connection(execution_options={"isolation_level": "READ COMMITTED"})
-        yield
 
 
 def _published_scope():

@@ -185,27 +185,25 @@ def _unit_technologies(db: Session, unit_id: int) -> list[TechnologyRef]:
     return [TechnologyRef(slug=slug, name=name) for slug, name in rows]
 
 
-def get_technology_units(db: Session, technology_slug: str) -> TechnologyUnits:
-    """Published units that teach a published technology, in catalog order."""
-    technology = db.scalar(
-        select(Technology).where(Technology.slug == technology_slug, Technology.status == PUBLISHED)
-    )
-    if technology is None:
-        raise TechnologyNotFound()
+def units_by_technology(db: Session, technology_ids: list[int]) -> dict[int, list[TechnologyUnit]]:
+    """Published units of published tracks for each technology id, in catalog order.
+    Technology-level links only (P2); the same answer for every visitor."""
+    found: dict[int, list[TechnologyUnit]] = {technology_id: [] for technology_id in technology_ids}
+    if not technology_ids:
+        return found
     rows = db.execute(
-        select(LearningUnit, LearningTrack)
-        .join(LearningUnitTechnology, LearningUnitTechnology.unit_id == LearningUnit.id)
+        select(LearningUnitTechnology.technology_id, LearningUnit, LearningTrack)
+        .join(LearningUnit, LearningUnit.id == LearningUnitTechnology.unit_id)
         .join(LearningTrack, LearningTrack.id == LearningUnit.track_id)
         .where(
-            LearningUnitTechnology.technology_id == technology.id,
+            LearningUnitTechnology.technology_id.in_(technology_ids),
             LearningUnit.status == PUBLISHED,
             LearningTrack.status == PUBLISHED,
         )
         .order_by(LearningTrack.position, LearningUnit.position)
     ).all()
-    return TechnologyUnits(
-        technology=TechnologyRef(slug=technology.slug, name=technology.name),
-        units=[
+    for technology_id, unit, track in rows:
+        found[technology_id].append(
             TechnologyUnit(
                 track=TrackRef(slug=track.slug, title=track.title),
                 slug=unit.slug,
@@ -214,8 +212,20 @@ def get_technology_units(db: Session, technology_slug: str) -> TechnologyUnits:
                 summary=unit.summary,
                 estimated_minutes=unit.estimated_minutes,
             )
-            for unit, track in rows
-        ],
+        )
+    return found
+
+
+def get_technology_units(db: Session, technology_slug: str) -> TechnologyUnits:
+    """Published units that teach a published technology, in catalog order."""
+    technology = db.scalar(
+        select(Technology).where(Technology.slug == technology_slug, Technology.status == PUBLISHED)
+    )
+    if technology is None:
+        raise TechnologyNotFound()
+    return TechnologyUnits(
+        technology=TechnologyRef(slug=technology.slug, name=technology.name),
+        units=units_by_technology(db, [technology.id])[technology.id],
     )
 
 
