@@ -9,6 +9,10 @@ from app.db.types import BigId, UtcDateTime, utc_now
 
 USER_ROLES = ("user", "admin")
 USER_STATUSES = ("active", "disabled")
+# How a learner describes themself. Used only for static start guidance and menu
+# links, never for ranking, recommendations or access (A-plan v0.2, C-2). Separate
+# from users.role, which is the authorization role.
+LEARNER_TYPES = ("beginner", "developer", "exploring")
 
 
 def _in_list(column: str, values: tuple[str, ...]) -> str:
@@ -51,6 +55,12 @@ class UserSettings(Base):
     """Per-user switches. Personalization is OFF until the user turns it on."""
 
     __tablename__ = "user_settings"
+    __table_args__ = (
+        CheckConstraint(
+            f"learner_type IS NULL OR {_in_list('learner_type', LEARNER_TYPES)}",
+            name="learner_type_valid",
+        ),
+    )
 
     user_id: Mapped[int] = mapped_column(
         BigId, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
@@ -58,6 +68,8 @@ class UserSettings(Base):
     personalization_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("0")
     )
+    # Optional; NULL means "not chosen". Changeable at any time.
+    learner_type: Mapped[str | None] = mapped_column(String(20))
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     user: Mapped[User] = relationship(back_populates="user_settings")

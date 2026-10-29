@@ -4,7 +4,7 @@ import pytest
 from alembic import command
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 from tests.conftest import alembic_config
 
@@ -73,3 +73,43 @@ def test_single_head_and_linear_history(test_engine):
     with test_engine.connect() as connection:
         script = ScriptDirectory.from_config(alembic_config(connection))
     assert len(script.get_heads()) == 1
+
+
+def test_learner_type_migration_keeps_existing_users(test_engine, clean_db):
+    """0006 adds user_settings.learner_type; users created before it keep their rows
+    and get NULL ("not chosen")."""
+    with test_engine.connect() as connection:
+        config = alembic_config(connection)
+        command.upgrade(config, "head")
+        command.downgrade(config, "0005")
+        connection.commit()
+        assert "learner_type" not in {
+            c["name"] for c in inspect(connection).get_columns("user_settings")
+        }
+        connection.execute(
+            text(
+                "INSERT INTO users (email, password_hash, display_name, role, status, "
+                "created_at, updated_at) VALUES ('old@example.com', 'x', 'Old', 'user', "
+                "'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))"
+            )
+        )
+        user_id = connection.execute(text("SELECT LAST_INSERT_ID()")).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO user_settings (user_id, personalization_enabled, updated_at) "
+                "VALUES (:u, 1, UTC_TIMESTAMP(6))"
+            ),
+            {"u": user_id},
+        )
+        connection.commit()
+
+        command.upgrade(config, "head")
+        connection.commit()
+        row = connection.execute(
+            text(
+                "SELECT u.email, u.role, s.personalization_enabled, s.learner_type "
+                "FROM users u JOIN user_settings s ON s.user_id = u.id WHERE u.id = :u"
+            ),
+            {"u": user_id},
+        ).one()
+    assert tuple(row) == ("old@example.com", "user", 1, None)
