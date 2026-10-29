@@ -13,6 +13,8 @@ pytestmark = pytest.mark.integration
 
 HEAD_TABLES = {
     "alembic_version",
+    "user_interests",
+    "user_skills",
     "career_roles",
     "career_role_technologies",
     "user_career_candidates",
@@ -169,3 +171,70 @@ def test_career_migration_keeps_existing_records(test_engine, clean_db):
         command.upgrade(config, "head")
         connection.commit()
     assert before == ("kept@example.com", 0, "beginner", 100, "unit_completed")
+
+
+def test_personalization_migration_keeps_goals_candidates_and_settings(test_engine, clean_db):
+    """0009 only adds tables: P3 goals and candidates and the settings written before
+    it survive the upgrade and a downgrade back to 0008."""
+    snapshot_sql = (
+        "SELECT u.email, s.personalization_enabled, s.learner_type, g.title, g.status, r.slug "
+        "FROM users u JOIN user_settings s ON s.user_id = u.id "
+        "JOIN learning_goals g ON g.user_id = u.id "
+        "JOIN user_career_candidates c ON c.user_id = u.id "
+        "JOIN career_roles r ON r.id = c.role_id WHERE u.id = :u"
+    )
+    with test_engine.connect() as connection:
+        config = alembic_config(connection)
+        command.upgrade(config, "head")
+        command.downgrade(config, "0008")
+        connection.commit()
+        connection.execute(
+            text(
+                "INSERT INTO users (email, password_hash, display_name, role, status, "
+                "created_at, updated_at) VALUES ('p3@example.com', 'x', 'P3', 'user', "
+                "'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))"
+            )
+        )
+        user_id = connection.execute(text("SELECT LAST_INSERT_ID()")).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO user_settings (user_id, personalization_enabled, learner_type, "
+                "updated_at) VALUES (:u, 1, 'developer', UTC_TIMESTAMP(6))"
+            ),
+            {"u": user_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO career_roles (slug, name, summary, description_md, tasks, "
+                "reference_links, position, status, created_at, updated_at) VALUES ('r', 'R', "
+                "'s', 'd', '[]', '[]', 1, 'published', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))"
+            )
+        )
+        role_id = connection.execute(text("SELECT LAST_INSERT_ID()")).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO user_career_candidates (user_id, role_id, created_at, updated_at) "
+                "VALUES (:u, :r, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))"
+            ),
+            {"u": user_id, "r": role_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO learning_goals (user_id, title, role_id, status, created_at, "
+                "updated_at) VALUES (:u, 'goal', :r, 'active', UTC_TIMESTAMP(6), "
+                "UTC_TIMESTAMP(6))"
+            ),
+            {"u": user_id, "r": role_id},
+        )
+        connection.commit()
+        before = tuple(connection.execute(text(snapshot_sql), {"u": user_id}).one())
+
+        command.upgrade(config, "head")
+        connection.commit()
+        assert tuple(connection.execute(text(snapshot_sql), {"u": user_id}).one()) == before
+        command.downgrade(config, "0008")
+        connection.commit()
+        assert tuple(connection.execute(text(snapshot_sql), {"u": user_id}).one()) == before
+        command.upgrade(config, "head")
+        connection.commit()
+    assert before == ("p3@example.com", 1, "developer", "goal", "active", "r")

@@ -16,6 +16,7 @@ from app.models.learning import (
     LearningUnit,
     LearningUnitTechnology,
 )
+from app.models.personalization import UserInterest, UserSkill
 from app.models.progress import UserActivityRecord, UserUnitProgress, XpLedgerEntry
 from app.models.quiz import Quiz, QuizAttempt, QuizAttemptAnswer, QuizChoice, QuizQuestion
 from app.models.user import RefreshToken, User, UserSettings
@@ -43,7 +44,9 @@ __all__ = [
     "User",
     "UserActivityRecord",
     "UserCareerCandidate",
+    "UserInterest",
     "UserSettings",
+    "UserSkill",
     "UserUnitProgress",
     "XpLedgerEntry",
 ]

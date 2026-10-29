@@ -75,6 +75,8 @@ def alembic_config(connection: Connection) -> Config:
 
 
 TABLES_IN_DELETE_ORDER = (
+    "user_interests",
+    "user_skills",
     "user_career_candidates",
     "learning_goals",
     "career_role_technologies",
