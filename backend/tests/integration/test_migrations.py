@@ -33,6 +33,7 @@ HEAD_TABLES = {
     "contents",
     "content_technologies",
     "job_runs",
+    "learning_unit_technologies",
 }
 
 

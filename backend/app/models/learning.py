@@ -115,3 +115,21 @@ class LearningActivity(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     unit: Mapped[LearningUnit] = relationship(back_populates="activities")
+
+
+class LearningUnitTechnology(Base):
+    """Which technologies a unit teaches, as stated in its content file.
+
+    Hand-written in the unit file, so it is a reviewed link (unlike the rule-based
+    tags on collected news). Used for technology-level navigation between Home, Dev
+    and Career only (A-plan v0.2, P2).
+    """
+
+    __tablename__ = "learning_unit_technologies"
+
+    unit_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("learning_units.id", ondelete="RESTRICT"), primary_key=True
+    )
+    technology_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("technologies.id", ondelete="RESTRICT"), primary_key=True, index=True
+    )

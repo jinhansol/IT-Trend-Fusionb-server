@@ -75,6 +75,7 @@ def alembic_config(connection: Connection) -> Config:
 
 
 TABLES_IN_DELETE_ORDER = (
+    "learning_unit_technologies",
     "content_technologies",
     "job_runs",
     "contents",
