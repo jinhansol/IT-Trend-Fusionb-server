@@ -114,8 +114,9 @@ def test_type_can_be_changed_and_cleared(make_client, clean_db):
     [
         {"learner_type": "admin"},
         {"learner_type": "expert"},
-        # P1 has no personalization switch; it must not be settable through this API.
-        {"personalization_enabled": True},
+        # The switch is settable since P4, but only with a real boolean.
+        {"personalization_enabled": None},
+        {"personalization_enabled": "yes"},
         {"role": "admin"},
     ],
 )

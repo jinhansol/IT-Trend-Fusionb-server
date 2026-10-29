@@ -30,6 +30,7 @@ import app.integrations.http, app.integrations.sources
 import app.api.routes.careers, app.api.routes.me_careers, app.api.routes.me_goals
 import app.services.career_catalog, app.services.career_candidates, app.services.learning_goals
 import app.services.transactions, app.content_loader.careers
+import app.api.routes.me_personalization, app.services.personalization
 from app.core.config import Settings
 
 settings = Settings(

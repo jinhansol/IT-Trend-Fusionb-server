@@ -74,3 +74,17 @@ def test_database_url_is_required(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     with pytest.raises(ValidationError, match="database_url"):
         Settings(_env_file=None)
+
+
+def test_signup_limit_defaults_to_five_when_not_set(monkeypatch):
+    """A missing setting never relaxes the sign-up limit (E2E raises it for its own
+    test server only, see e2e/playwright.config.js)."""
+    monkeypatch.delenv("REGISTER_RATE_LIMIT_ATTEMPTS", raising=False)
+    assert make_settings().register_rate_limit_attempts == 5
+
+
+@pytest.mark.parametrize("value", ["", "0", "-1", "abc", "3.5"])
+def test_invalid_signup_limit_stops_startup_instead_of_relaxing(monkeypatch, value):
+    monkeypatch.setenv("REGISTER_RATE_LIMIT_ATTEMPTS", value)
+    with pytest.raises(ValidationError):
+        make_settings()

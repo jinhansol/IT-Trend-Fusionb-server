@@ -25,6 +25,7 @@ from app.api.routes import (
     me_careers,
     me_goals,
     me_learning,
+    me_personalization,
     technologies,
 )
 from app.core.config import Settings, get_settings
@@ -91,6 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(careers.router)
     app.include_router(me_careers.router)
     app.include_router(me_goals.router)
+    app.include_router(me_personalization.router)
 
     logger.info(
         "DevHub API created (env=%s, database=%s)", settings.app_env, settings.database_name

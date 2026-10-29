@@ -2,11 +2,16 @@ from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.schemas.learning import TechnologyUnits
+from app.schemas.learning import TechnologyList, TechnologyUnits
 from app.services import learning_catalog
 
 # Public, read-only. Technology-level links between Home, Dev and Career (P2).
 router = APIRouter(prefix="/api/technologies", tags=["technologies"])
+
+
+@router.get("", response_model=TechnologyList)
+def list_technologies(db: Session = Depends(get_db)) -> TechnologyList:
+    return learning_catalog.list_technologies(db)
 
 
 @router.get("/{technology_slug}/units", response_model=TechnologyUnits)

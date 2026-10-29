@@ -37,6 +37,8 @@ def update_settings(
             db.add(settings_row)
         if "learner_type" in body.model_fields_set:
             settings_row.learner_type = body.learner_type
+        if "personalization_enabled" in body.model_fields_set:
+            settings_row.personalization_enabled = body.personalization_enabled
         db.flush()
         result = _settings_out(settings_row)
     return result

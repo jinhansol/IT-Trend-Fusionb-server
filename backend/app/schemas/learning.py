@@ -88,3 +88,15 @@ class TechnologyUnits(BaseModel):
 
     technology: TechnologyRef
     units: list[TechnologyUnit]
+
+
+class TechnologyItem(BaseModel):
+    slug: str
+    name: str
+    kind: str
+
+
+class TechnologyList(BaseModel):
+    """Every published technology, for pickers (group by kind, search by name)."""
+
+    items: list[TechnologyItem]

@@ -15,6 +15,8 @@ from app.models.quiz import Quiz, QuizQuestion
 from app.schemas.content import TechnologyRef
 from app.schemas.learning import (
     ActivityOut,
+    TechnologyItem,
+    TechnologyList,
     TechnologyUnit,
     TechnologyUnits,
     TrackDetail,
@@ -183,6 +185,18 @@ def _unit_technologies(db: Session, unit_id: int) -> list[TechnologyRef]:
         .order_by(Technology.name)
     ).all()
     return [TechnologyRef(slug=slug, name=name) for slug, name in rows]
+
+
+def list_technologies(db: Session) -> TechnologyList:
+    """Published technologies by kind and name: the same list for every visitor."""
+    rows = db.scalars(
+        select(Technology)
+        .where(Technology.status == PUBLISHED)
+        .order_by(Technology.kind, Technology.name, Technology.slug)
+    )
+    return TechnologyList(
+        items=[TechnologyItem(slug=t.slug, name=t.name, kind=t.kind) for t in rows]
+    )
 
 
 def units_by_technology(db: Session, technology_ids: list[int]) -> dict[int, list[TechnologyUnit]]:
