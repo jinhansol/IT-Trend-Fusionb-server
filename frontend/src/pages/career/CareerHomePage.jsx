@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Compass } from "lucide-react";
 import { fetchTracks } from "../../api/learning";
+import { fetchMyGoals } from "../../api/goals";
 import { fetchMySummary, fetchMyTrackProgress } from "../../api/progress";
 import { useAuth } from "../../auth/useAuth";
 import { useApiResource } from "../../hooks/useApiResource";
 import { useMyResource } from "../../hooks/useMyResource";
+import GoalCard from "../../components/career/GoalCard";
 import LoadState from "../../components/learn/LoadState";
 import LoginPrompt from "../../components/learn/LoginPrompt";
 import StartGuide from "../../components/learn/StartGuide";
@@ -70,6 +72,54 @@ function MyStatus() {
   );
 }
 
+// The user's own active goals (written by them; shown with personalization ON or OFF).
+function MyGoals() {
+  const state = useMyResource(() => fetchMyGoals("active"), []);
+  if (state.status !== "ready") return null;
+  const goals = state.data.items;
+  return (
+    <section className="mb-10" aria-labelledby="my-goals">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 id="my-goals" className="text-xl font-bold">
+          내 학습 목표
+        </h2>
+        <Link to="/career/goals" className="text-sm font-semibold text-indigo-600">
+          목표 관리
+        </Link>
+      </div>
+      {goals.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          아직 진행 중인 목표가 없습니다. 목표 관리에서 직접 추가하거나, 진로 탐색에서 직무를 목표로 삼을 수 있어요.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {goals.map((goal) => (
+            <GoalCard key={goal.id} goal={goal} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ExploreCard() {
+  return (
+    <Link
+      to="/career/explore"
+      className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm hover:shadow-md hover:border-indigo-200 transition mb-10"
+    >
+      <span className="w-11 h-11 shrink-0 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+        <Compass size={22} aria-hidden="true" />
+      </span>
+      <span className="flex-1">
+        <span className="block font-bold">진로 탐색</span>
+        <span className="block text-sm text-slate-500">IT 직무가 하는 일과 쓰는 기술, 관련 학습을 둘러보세요.</span>
+      </span>
+      <ArrowRight size={18} className="text-indigo-600" aria-hidden="true" />
+    </Link>
+  );
+}
+
 function TrackCard({ track }) {
   const mine = useMyResource(() => fetchMyTrackProgress(track.slug), [track.slug]).data;
   return (
@@ -109,6 +159,9 @@ export default function CareerHomePage() {
           <LoginPrompt message="로그인하면 내 학습 현황과 레벨, 이어서 학습할 단원을 볼 수 있어요." />
         )}
       </div>
+
+      {status === "authenticated" && <MyGoals />}
+      <ExploreCard />
 
       <h2 id="learning-tracks" className="text-xl font-bold mb-4 scroll-mt-24">학습 트랙</h2>
 

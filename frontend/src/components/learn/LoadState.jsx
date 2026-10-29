@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-const NOT_FOUND_CODES = new Set(["TRACK_NOT_FOUND", "UNIT_NOT_FOUND"]);
+const NOT_FOUND_CODES = new Set(["TRACK_NOT_FOUND", "UNIT_NOT_FOUND", "CAREER_ROLE_NOT_FOUND"]);
 
 /** Loading / not-found / error placeholder for learning pages. */
 export default function LoadState({ state, notFoundText = "찾을 수 없는 학습 콘텐츠입니다." }) {
