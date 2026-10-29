@@ -56,12 +56,13 @@ uv run python -m app.content_loader load content/python --dry-run   # 바뀔 내
 uv run python -m app.content_loader load content/python             # DB에 반영
 ```
 
-반영 순서: **기술 분류(`technologies`) → 수집 소스(`sources`) → 트랙(`load`)**
+반영 순서: **기술 분류(`technologies`) → 수집 소스(`sources`) → 직무(`careers`) → 트랙(`load`)**
 
 - 같은 파일을 여러 번 반영해도 결과가 같습니다. 파일에서 지운 단원·활동은 삭제되지 않고 `retired`(비공개) 처리됩니다.
 - 형식 오류(중복 slug·순서, 필수 항목 누락, http(s)가 아닌 링크, 렌더링되지 않는 굵게 표시 등)가 있으면 아무것도 반영하지 않습니다.
 - 이미지·동영상은 저장소에 넣지 않고 외부 링크로 연결합니다.
 - 단원 파일의 `technologies: [python]`에 그 단원이 다루는 기술(`content/technologies.yaml`의 slug)을 적을 수 있습니다(선택, 최대 10개). 없는 기술이나 `retired` 기술을 적으면 트랙 전체를 반영하지 않습니다. 다시 반영하면 파일 내용으로 연결이 맞춰집니다.
+- 트랙 slug로 `explore`, `roles`, `goals`는 쓸 수 없습니다(Career 진로 화면 경로와 겹침).
 - 단원 파일의 `quiz:`에 문항과 정답·해설을 적습니다(문항 1~30개, 기본 통과 기준 80%). 퀴즈가 없는 단원은 완료할 수 없습니다. 이미 응시 기록이 있는 퀴즈를 고치면 새 버전이 만들어지고, 이미 완료한 단원은 완료 상태가 유지됩니다.
 
 ### 학습 진행·보상 규칙
@@ -70,6 +71,24 @@ uv run python -m app.content_loader load content/python             # DB에 반�
 - XP는 단원 완료 때만 100 XP 지급되며, 같은 단원으로 두 번 받지 않습니다. 레벨은 XP 합계로 계산합니다(1→2레벨 100 XP, 이후 레벨마다 필요 XP +50). 값은 `XP_PER_UNIT_COMPLETION`, `LEVEL_BASE_XP`, `LEVEL_STEP_XP`로 바꿀 수 있습니다.
 - 퀴즈 재도전은 무제한이며, 통과 전에는 점수와 틀린 문항 번호만, 통과 후에는 정답과 해설을 보여줍니다. 채점은 서버에서 하고 정답은 공개 API에 포함되지 않습니다.
 - 개인 진행 API는 `/api/me/...` 아래에 있고 로그인한 사용자 자신의 기록만 다룹니다.
+
+### 진로 탐색·학습 목표 (P3)
+
+```bash
+cd backend
+uv run python -m app.content_loader careers content/careers.yaml --dry-run   # 기술 분류를 먼저 반영
+```
+
+- 직무는 `content/careers.yaml`에 파일로 관리합니다(설명·대표 업무·핵심/관련 기술·근거 링크 1개 이상). 파일에서 빠진 직무는 `retired` 처리되고, 사용자가 저장한 후보·목표는 그대로 남습니다.
+  - **이 파일은 아직 없습니다.** 초기 직무 6개 초안은 근거 대조 전(UNVERIFIED)이라 `docs/devhub-2.0/review/careers/`에서 검토 중이며, 서비스 데이터로 반영하지 않았습니다. 테스트와 E2E는 별도 테스트 데이터를 씁니다.
+- 공개 API(로그인 불필요, 읽기 전용, 누구에게나 같은 응답): `GET /api/careers/roles`, `GET /api/careers/roles/{slug}`(기술별 공개 단원 포함).
+- 진로 후보(로그인 필요, 최대 10개): `GET /api/me/career-candidates`, `PUT|DELETE /api/me/career-candidates/{role_slug}`.
+- 학습 목표(로그인 필요, 진행 중 최대 5개): `GET|POST /api/me/goals`, `PATCH|DELETE /api/me/goals/{id}`. 대상은 직무·기술·트랙 중 하나 또는 없음.
+- 정책:
+  - 학습 목표는 Career 성장 데이터입니다. 개인화 설정과 상관없이 저장되고, 연결된 학습과 내 진행 상태를 보여 줍니다(추천이 아니라 고른 대상의 고정 목록).
+  - 진로 탐색은 목표를 만들거나 바꾸지 않습니다. "학습 목표로 추가"는 양식만 열고, 저장은 사용자가 합니다.
+  - 후보·목표 저장은 개인화 설정·학습 진행·XP를 바꾸지 않습니다. 목표 달성은 사용자가 직접 표시하고 XP는 없습니다.
+  - 달성(`achieved`)에서 다른 상태로 바꾸면 달성 시각이 지워지고, 다시 달성하면 새 시각이 기록됩니다. 보관과 삭제는 별개입니다.
 
 ### Home·Dev 콘텐츠 수집
 
