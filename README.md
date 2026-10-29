@@ -42,6 +42,8 @@ uv run uvicorn app.main:create_app --factory --reload
 - API 문서(로컬만): `http://127.0.0.1:8000/api/docs`
 - 기존 백엔드(`backend/main.py`)는 별도 실행 경로이며 새 앱과 섞이지 않습니다.
 - 인증 API: `POST /api/auth/register`, `/login`, `/refresh`, `/logout`, `GET /api/me`. access token은 응답 본문(브라우저 메모리), refresh token은 httpOnly 쿠키(`/api/auth` 경로 전용)로 전달됩니다.
+- 학습자 유형(선택): 가입 시 `learner_type`(`beginner`/`developer`/`exploring`)을 보낼 수 있고, `PATCH /api/me/settings`로 바꾸거나 `null`로 지울 수 있습니다. 권한 필드 `users.role`과는 별개이며, Career 첫 화면의 정적 시작 안내에만 쓰입니다. 콘텐츠 순서·추천·접근 권한에는 영향이 없습니다.
+- 가입 횟수 제한: IP당 1시간 5회(`REGISTER_RATE_LIMIT_ATTEMPTS`, `REGISTER_RATE_LIMIT_WINDOW_SECONDS`). 로그인 실패 제한과 같이 프로세스 메모리에 기록하므로, 워커가 여러 개면 워커마다 따로 세고 재시작하면 초기화됩니다. 학교·회사·통신사 NAT처럼 여러 사람이 한 IP를 쓰면 한도를 함께 씁니다. 리버스 프록시 뒤에서는 실제 클라이언트 IP 설정이 필요합니다. 여러 서버로 늘리기 전에 공유 저장소 기반으로 바꿔야 합니다.
 
 ### 학습 콘텐츠
 
