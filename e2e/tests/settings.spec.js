@@ -36,7 +36,7 @@ test("the chosen type changes only the guide, and can be changed in settings", a
   await page.getByRole("link", { name: "설정" }).click();
   await expect(page.getByRole("radio", { name: /입문자/ })).toBeChecked();
   await page.getByRole("radio", { name: /탐색 중/ }).click();
-  await page.getByRole("button", { name: "저장" }).click();
+  await page.getByRole("button", { name: "저장", exact: true }).click(); // the learner type form
   await expect(page.getByRole("status")).toHaveText("저장했습니다.");
 
   await page.getByRole("link", { name: "Career" }).click();

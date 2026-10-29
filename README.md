@@ -90,6 +90,16 @@ uv run python -m app.content_loader careers content/careers.yaml --dry-run   # �
   - 후보·목표 저장은 개인화 설정·학습 진행·XP를 바꾸지 않습니다. 목표 달성은 사용자가 직접 표시하고 XP는 없습니다.
   - 달성(`achieved`)에서 다른 상태로 바꾸면 달성 시각이 지워지고, 다시 달성하면 새 시각이 기록됩니다. 보관과 삭제는 별개입니다.
 
+### 개인화 설정 (P4)
+
+- 개인화는 기본 꺼짐입니다. 설정 화면에서 사용자가 직접 켜고 끕니다(`PATCH /api/me/settings`의 `personalization_enabled`, 참/거짓만 허용).
+- 관심 기술(최대 20개)과 역량 자기 평가(기술별 `learning`·`used`·`confident`, 최대 30개)는 켜짐·꺼짐과 상관없이 조회·편집할 수 있습니다. 역량은 사용자가 스스로 평가한 값이며 검증된 숙련도가 아닙니다.
+  - `GET /api/me/personalization`, `PUT /api/me/personalization/interests`, `PUT /api/me/personalization/skills`(둘 다 전체 교체·멱등. 잘못된 요청은 아무것도 바꾸지 않음)
+  - 기술 목록: `GET /api/technologies`(공개, 분야·언어·프레임워크 등 종류별)
+- 꺼짐: 데이터는 보관하지만 추천에 쓰지 않습니다. 켜짐 + 데이터 없음: 추천 프로필이 비어 있습니다. 현재는 개인화 추천 기능이 없습니다(P5).
+- 초기화(`POST /api/me/personalization/reset`): 관심 기술과 역량 자기 평가만 삭제합니다. 켜짐·꺼짐 상태, 학습 목표, 진로 후보, 학습 진행률, XP, 학습자 유형은 유지됩니다.
+- 관심·역량은 `services/personalization.py`만 읽고 씁니다. Home·Dev·Career 공개 응답은 게스트·꺼짐·켜짐 사용자 모두 같습니다(테스트로 고정).
+
 ### Home·Dev 콘텐츠 수집
 
 Home(IT 뉴스)과 Dev(개발자 글·질문)는 수집 작업이 DB에 저장한 내용을 보여 줍니다. 웹 서버는 외부 사이트를 호출하지 않고, 수집은 별도 명령으로만 실행합니다.

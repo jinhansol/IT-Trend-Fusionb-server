@@ -94,8 +94,8 @@ jobs:
       - name: Lint DevHub 2.0 files
         run: >-
           npx eslint vite.config.js src/main.jsx src/api/client.js src/api/client.test.js
-          src/api/auth.js src/api/learning.js src/api/progress.js src/api/content.js src/api/settings.js src/api/careers.js src/api/goals.js
-          src/auth src/hooks src/test src/utils src/learner src/components/learn src/components/feed src/components/career
+          src/api/auth.js src/api/learning.js src/api/progress.js src/api/content.js src/api/settings.js src/api/careers.js src/api/goals.js src/api/personalization.js
+          src/auth src/hooks src/test src/utils src/learner src/components/learn src/components/feed src/components/career src/components/settings
           src/pages/career src/pages/home src/pages/dev src/pages/settings src/pages/feed.test.jsx
           src/router/AppRouter.jsx
           src/components/common/HeaderNav.jsx src/modals/LoginPopup.jsx src/modals/SignupPopup.jsx

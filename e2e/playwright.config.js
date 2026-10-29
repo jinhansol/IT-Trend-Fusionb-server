@@ -15,6 +15,9 @@ export const backendEnv = {
   // Throwaway secret for this local test server only.
   JWT_SECRET: "e2e-only-secret-not-used-anywhere-else-0123456789",
   LOG_LEVEL: "WARNING",
+  // Every spec signs up its own users from one IP; the production default (5 per hour)
+  // is checked by the backend tests, so the E2E server only needs a higher ceiling.
+  REGISTER_RATE_LIMIT_ATTEMPTS: "100",
 };
 
 export default defineConfig({
