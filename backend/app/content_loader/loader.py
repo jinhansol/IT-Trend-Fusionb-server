@@ -14,8 +14,14 @@ from dataclasses import dataclass, field
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.orm import Session
 
-from app.content_loader.schema import ActivityDef, QuizDef, TrackContent, UnitDef
-from app.models.learning import LearningActivity, LearningTrack, LearningUnit
+from app.content_loader.schema import ActivityDef, ContentError, QuizDef, TrackContent, UnitDef
+from app.models.content import Technology
+from app.models.learning import (
+    LearningActivity,
+    LearningTrack,
+    LearningUnit,
+    LearningUnitTechnology,
+)
 from app.models.quiz import Quiz, QuizAttempt, QuizChoice, QuizQuestion
 
 RETIRED = "retired"
@@ -95,8 +101,35 @@ def _park_moving_rows(db: Session, rows: dict, targets: dict) -> None:
     db.flush()
 
 
+def _technology_ids(db: Session, content: TrackContent) -> dict[str, int]:
+    """Resolve every technology slug the units reference, before anything is written.
+    Technologies must be loaded first (content/technologies.yaml) and published."""
+    wanted = {slug for unit in content.units for slug in unit.technologies}
+    if not wanted:
+        return {}
+    found = dict(
+        db.execute(
+            select(Technology.slug, Technology.id).where(
+                Technology.slug.in_(wanted), Technology.status == "published"
+            )
+        ).all()
+    )
+    problems = [
+        f"unit '{unit.slug}': {', '.join(sorted(set(unit.technologies) - set(found)))}"
+        for unit in content.units
+        if set(unit.technologies) - set(found)
+    ]
+    if problems:
+        raise ContentError(
+            f"track '{content.track.slug}' references unknown or retired technologies "
+            f"({'; '.join(problems)}). Load content/technologies.yaml first."
+        )
+    return found
+
+
 def apply_track(db: Session, content: TrackContent) -> LoadReport:
     report = LoadReport(track=content.track.slug)
+    technology_ids = _technology_ids(db, content)
 
     track = db.scalar(select(LearningTrack).where(LearningTrack.slug == content.track.slug))
     if track is None:
@@ -134,9 +167,42 @@ def apply_track(db: Session, content: TrackContent) -> LoadReport:
                 report.updated.append(f"unit {unit_def.slug}")
         _apply_activities(db, unit, unit_def, report)
         _apply_quiz(db, unit, unit_def.quiz, report)
+        _apply_unit_technologies(db, unit, unit_def, technology_ids, report)
 
     db.flush()
     return report
+
+
+def _apply_unit_technologies(
+    db: Session,
+    unit: LearningUnit,
+    unit_def: UnitDef,
+    technology_ids: dict[str, int],
+    report: LoadReport,
+) -> None:
+    """Make the unit's technology links match the file exactly."""
+    wanted = {technology_ids[slug] for slug in unit_def.technologies}
+    current = set(
+        db.scalars(
+            select(LearningUnitTechnology.technology_id).where(
+                LearningUnitTechnology.unit_id == unit.id
+            )
+        )
+    )
+    if wanted == current:
+        return
+    if current - wanted:
+        db.execute(
+            delete(LearningUnitTechnology).where(
+                LearningUnitTechnology.unit_id == unit.id,
+                LearningUnitTechnology.technology_id.in_(current - wanted),
+            )
+        )
+    db.add_all(
+        LearningUnitTechnology(unit_id=unit.id, technology_id=tech_id)
+        for tech_id in sorted(wanted - current)
+    )
+    report.updated.append(f"unit {unit_def.slug} technologies")
 
 
 def _apply_activities(

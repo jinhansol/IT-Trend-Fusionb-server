@@ -139,10 +139,13 @@ class UnitDef(_Strict):
     activities: list[ActivityDef] = Field(min_length=1)
     # A unit without a quiz can be studied but not completed (completion needs a pass).
     quiz: QuizDef | None = None
+    # Technology slugs (content/technologies.yaml) this unit teaches. Optional.
+    technologies: list[Slug] = Field(default_factory=list, max_length=10)
 
     @model_validator(mode="after")
     def _unique_activity_slugs(self) -> "UnitDef":
         _require_unique([a.slug for a in self.activities], "activity slug")
+        _require_unique(self.technologies, "technology")
         return self
 
 

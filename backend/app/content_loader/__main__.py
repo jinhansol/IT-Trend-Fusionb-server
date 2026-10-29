@@ -72,6 +72,11 @@ def main(argv: list[str] | None = None) -> int:
             session.rollback()
         else:
             session.commit()
+    except ContentError as exc:
+        # Problems that need the database to detect (e.g. unknown technologies).
+        session.rollback()
+        print(f"Content error: {exc}", file=sys.stderr)
+        return 1
     except Exception:
         session.rollback()
         raise

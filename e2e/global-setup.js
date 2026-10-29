@@ -27,6 +27,8 @@ export default function globalSetup() {
     throw new Error(`Refusing to run E2E tests against database "${name}" (expected *_test)`);
   }
   run(["alembic", "upgrade", "head"]);
+  // Technologies before tracks: units reference technology slugs.
+  run(["python", "-m", "app.content_loader", "technologies", "content/technologies.yaml"]);
   run(["python", "-m", "app.content_loader", "load", "content/python"]);
   // Home/Dev content from stored sample responses (no external sites).
   run(["python", "-m", "tests.e2e_seed"]);

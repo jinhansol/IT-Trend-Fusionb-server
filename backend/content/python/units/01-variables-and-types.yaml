@@ -5,6 +5,8 @@ title: 변수와 기본 자료형
 summary: >-
   값을 이름에 담는 변수, 그리고 Python이 다루는 기본 자료형(int, float, str, bool)을 배웁니다.
 estimated_minutes: 40
+# Technologies this unit teaches (content/technologies.yaml). Load technologies first.
+technologies: [python]
 status: published
 
 activities:

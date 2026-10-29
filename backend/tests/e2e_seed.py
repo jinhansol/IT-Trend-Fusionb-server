@@ -6,11 +6,17 @@ E2E must not depend on external sites, so the real collector runs with the fake
 fetcher. Refuses any database whose live name does not end with "_test".
 """
 
+from pathlib import Path
+
+import yaml
+
 from app.core.config import get_settings
 from app.db.safety import assert_test_database
 from app.db.session import create_db_engine
 from tests.collect_helpers import collect_all, seed_catalog
 from tests.integration.test_content_api import shift_dates_to_now
+
+TECHNOLOGIES_FILE = Path(__file__).resolve().parents[1] / "content" / "technologies.yaml"
 
 
 def main() -> None:
@@ -18,7 +24,10 @@ def main() -> None:
     engine = create_db_engine(settings)
     try:
         name = assert_test_database(engine, settings.database_name)
-        seed_catalog(engine)
+        # The real taxonomy (as loaded by global-setup), so learning units keep their
+        # technology links; only the sources are the test ones with sample responses.
+        technologies = yaml.safe_load(TECHNOLOGIES_FILE.read_text(encoding="utf-8"))
+        seed_catalog(engine, technologies=technologies)
         results = collect_all(engine)
         shift_dates_to_now(engine)
     finally:
