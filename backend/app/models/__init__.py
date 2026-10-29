@@ -1,5 +1,6 @@
 """ORM models. Import every model module here so Alembic autogenerate sees it."""
 
+from app.models.career import CareerRole, CareerRoleTechnology, UserCareerCandidate
 from app.models.content import (
     Content,
     ContentSource,
@@ -8,6 +9,7 @@ from app.models.content import (
     Technology,
     TechnologyAlias,
 )
+from app.models.goals import LearningGoal
 from app.models.learning import (
     LearningActivity,
     LearningTrack,
@@ -19,11 +21,14 @@ from app.models.quiz import Quiz, QuizAttempt, QuizAttemptAnswer, QuizChoice, Qu
 from app.models.user import RefreshToken, User, UserSettings
 
 __all__ = [
+    "CareerRole",
+    "CareerRoleTechnology",
     "Content",
     "ContentSource",
     "ContentTechnology",
     "JobRun",
     "LearningActivity",
+    "LearningGoal",
     "LearningTrack",
     "LearningUnit",
     "LearningUnitTechnology",
@@ -37,6 +42,7 @@ __all__ = [
     "TechnologyAlias",
     "User",
     "UserActivityRecord",
+    "UserCareerCandidate",
     "UserSettings",
     "UserUnitProgress",
     "XpLedgerEntry",

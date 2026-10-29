@@ -13,6 +13,10 @@ pytestmark = pytest.mark.integration
 
 HEAD_TABLES = {
     "alembic_version",
+    "career_roles",
+    "career_role_technologies",
+    "user_career_candidates",
+    "learning_goals",
     "users",
     "user_settings",
     "refresh_tokens",
@@ -114,3 +118,54 @@ def test_learner_type_migration_keeps_existing_users(test_engine, clean_db):
             {"u": user_id},
         ).one()
     assert tuple(row) == ("old@example.com", "user", 1, None)
+
+
+def test_career_migration_keeps_existing_records(test_engine, clean_db):
+    """0008 only adds tables: users, settings, learning progress and XP written before
+    it are unchanged by the upgrade and by a downgrade back to 0007."""
+    snapshot_sql = (
+        "SELECT u.email, s.personalization_enabled, s.learner_type, x.amount, x.reason "
+        "FROM users u JOIN user_settings s ON s.user_id = u.id "
+        "JOIN xp_ledger x ON x.user_id = u.id WHERE u.id = :u"
+    )
+    with test_engine.connect() as connection:
+        config = alembic_config(connection)
+        command.upgrade(config, "head")
+        command.downgrade(config, "0007")
+        connection.commit()
+        connection.execute(
+            text(
+                "INSERT INTO users (email, password_hash, display_name, role, status, "
+                "created_at, updated_at) VALUES ('kept@example.com', 'x', 'Kept', 'user', "
+                "'active', UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))"
+            )
+        )
+        user_id = connection.execute(text("SELECT LAST_INSERT_ID()")).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO user_settings (user_id, personalization_enabled, learner_type, "
+                "updated_at) VALUES (:u, 0, 'beginner', UTC_TIMESTAMP(6))"
+            ),
+            {"u": user_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO xp_ledger (user_id, amount, reason, source_type, source_id, "
+                "idempotency_key, policy_version, created_at) VALUES (:u, 100, "
+                "'unit_completed', 'unit', 1, 'unit:1', 'v1', UTC_TIMESTAMP(6))"
+            ),
+            {"u": user_id},
+        )
+        connection.commit()
+        before = tuple(connection.execute(text(snapshot_sql), {"u": user_id}).one())
+
+        command.upgrade(config, "head")
+        connection.commit()
+        assert tuple(connection.execute(text(snapshot_sql), {"u": user_id}).one()) == before
+
+        command.downgrade(config, "0007")
+        connection.commit()
+        assert tuple(connection.execute(text(snapshot_sql), {"u": user_id}).one()) == before
+        command.upgrade(config, "head")
+        connection.commit()
+    assert before == ("kept@example.com", 0, "beginner", 100, "unit_completed")
