@@ -1,0 +1,171 @@
+# UNVERIFIED 초안 — AI 작성, 공식 문서 대조 전, 사용자 검토 전. 정식 콘텐츠 아님.
+slug: lists-and-dicts
+position: 5
+title: 리스트와 딕셔너리
+summary: >-
+  여러 값을 순서대로 담는 리스트와, 키로 값을 찾는 딕셔너리를 만들고 꺼내고 바꾸는 방법을 배웁니다.
+estimated_minutes: 50
+# Technologies this unit teaches (content/technologies.yaml). Load technologies first.
+technologies: [python]
+status: published
+
+activities:
+  - slug: lists
+    kind: reading
+    title: 리스트
+    required: true
+    body_md: |
+      **리스트**는 여러 값을 순서대로 담습니다. 대괄호 `[]` 안에 쉼표로 구분해 씁니다.
+
+      ```python
+      fruits = ["사과", "배", "귤"]
+      print(fruits[0])    # 사과  (번호는 0부터 시작합니다)
+      print(fruits[-1])   # 귤    (음수는 뒤에서부터 셉니다)
+      print(len(fruits))  # 3
+      ```
+
+      ### 자주 쓰는 기능
+      | 코드 | 결과 | 설명 |
+      |---|---|---|
+      | `fruits.append("감")` | 끝에 `"감"` 추가 | 리스트 자체가 바뀝니다 |
+      | `fruits[1] = "포도"` | 1번 값을 바꿈 | 리스트는 바꿀 수 있습니다 |
+      | `"배" in fruits` | `True` 또는 `False` | 들어 있는지 확인 |
+      | `fruits[1:3]` | 1번부터 3번 직전까지 | 슬라이싱, 새 리스트를 만듭니다 |
+
+      없는 번호를 꺼내면 `IndexError`가 납니다. 값이 3개인 리스트의 마지막 번호는 `2`입니다.
+
+      `for`로 값을 하나씩 꺼낼 수 있습니다.
+
+      ```python
+      scores = [80, 95, 70]
+      total = 0
+      for s in scores:
+          total = total + s
+      print(total / len(scores))  # 81.66666666666667
+      ```
+
+  - slug: dicts
+    kind: reading
+    title: 딕셔너리
+    required: true
+    body_md: |
+      **딕셔너리**는 키(key)와 값(value)을 짝지어 담습니다. 중괄호 `{}` 안에 `키: 값`으로 씁니다.
+      번호 대신 **키로 값을 찾습니다.**
+
+      ```python
+      user = {"name": "민수", "age": 20}
+      print(user["name"])      # 민수
+      user["age"] = 21         # 있는 키는 값을 바꿉니다
+      user["city"] = "서울"     # 없는 키는 새로 추가합니다
+      print(user)  # {'name': '민수', 'age': 21, 'city': '서울'}
+      ```
+
+      ### 없는 키 다루기
+      - `user["email"]`처럼 없는 키를 꺼내면 `KeyError`가 납니다.
+      - `user.get("email")`은 오류 대신 `None`을, `user.get("email", "없음")`은 지정한 기본값을 돌려줍니다.
+      - `"email" in user`로 키가 있는지 먼저 확인할 수도 있습니다.
+
+      ### 반복하기
+      ```python
+      for key, value in user.items():
+          print(key, value)
+      # name 민수
+      # age 21
+      # city 서울
+      ```
+
+      한 딕셔너리 안에서 **키는 중복될 수 없습니다.** 같은 키에 다시 대입하면 값이 바뀝니다.
+
+  - slug: official-tutorial
+    kind: external
+    title: "공식 튜토리얼: 자료 구조"
+    url: https://docs.python.org/ko/3/tutorial/datastructures.html
+    required: true
+    body_md: |
+      Python 공식 튜토리얼(한국어)의 5장입니다. 리스트와 딕셔너리를 다루는 절을 읽고
+      예제를 직접 실행해 보세요.
+
+  - slug: practice-word-count
+    kind: exercise
+    title: "직접 해보기: 점수표와 단어 세기"
+    required: false
+    body_md: |
+      아래 두 프로그램을 완성해 보세요.
+
+      ```python
+      scores = [72, 88, 95, 64, 81]
+      # 1. 80점 이상인 점수만 high 리스트에 담아 출력하세요. ([88, 95, 81])
+
+      words = ["python", "java", "python", "go", "python"]
+      counts = {}
+      # 2. 단어별 등장 횟수를 counts에 담으세요. (힌트: counts.get(word, 0))
+      #    {'python': 3, 'java': 1, 'go': 1}
+      ```
+
+# 초안 — 사용자 검토 전. 정답은 Python 3.12로 확인함.
+quiz:
+  pass_score_percent: 80
+  questions:
+    - key: negative-index
+      type: single
+      prompt: "`nums = [10, 20, 30, 40]`일 때 `nums[-1]`의 값은 무엇일까요?"
+      explanation: "음수 번호는 뒤에서부터 셉니다. `-1`은 마지막 값인 40입니다."
+      choices:
+        - { key: a, label: "10" }
+        - { key: b, label: "30" }
+        - { key: c, label: "40", correct: true }
+        - { key: d, label: "IndexError가 발생한다" }
+
+    - key: slicing
+      type: single
+      prompt: "`nums = [10, 20, 30, 40]`일 때 `nums[1:3]`의 값은 무엇일까요?"
+      explanation: "슬라이싱은 시작 번호부터 끝 번호 **직전**까지입니다. 1번(20)과 2번(30)이 담깁니다."
+      choices:
+        - { key: a, label: "[10, 20, 30]" }
+        - { key: b, label: "[20, 30]", correct: true }
+        - { key: c, label: "[20, 30, 40]" }
+        - { key: d, label: "[10, 20]" }
+
+    - key: missing-key
+      type: single
+      prompt: |
+        다음 코드를 실행하면 어떻게 될까요?
+
+        ```python
+        user = {"name": "민수"}
+        print(user["age"])
+        ```
+      explanation: "없는 키를 대괄호로 꺼내면 `KeyError`가 납니다. 오류 없이 확인하려면 `user.get(\"age\")`처럼 `get()`을 씁니다."
+      choices:
+        - { key: a, label: "None이 출력된다" }
+        - { key: b, label: "0이 출력된다" }
+        - { key: c, label: "KeyError가 발생한다", correct: true }
+        - { key: d, label: "IndexError가 발생한다" }
+
+    - key: list-after-append
+      type: multiple
+      prompt: "`fruits = [\"사과\", \"배\"]` 다음에 `fruits.append(\"귤\")`을 실행했습니다. 참인 것을 **모두** 고르세요."
+      explanation: "`append()`는 끝에 값을 추가하므로 `[\"사과\", \"배\", \"귤\"]`이 됩니다. 길이는 3, 2번 값은 `\"귤\"`, 0번 값은 `\"사과\"`입니다."
+      choices:
+        - { key: a, label: "len(fruits) == 3", correct: true }
+        - { key: b, label: "\"배\" in fruits", correct: true }
+        - { key: c, label: "fruits[2] == \"귤\"", correct: true }
+        - { key: d, label: "fruits[0] == \"배\"" }
+
+    - key: update-and-add
+      type: single
+      prompt: |
+        다음 코드의 출력은 무엇일까요?
+
+        ```python
+        stock = {"apple": 3}
+        stock["apple"] = stock["apple"] + 2
+        stock["pear"] = 1
+        print(stock)
+        ```
+      explanation: "`apple`은 이미 있는 키라 값이 5로 바뀌고, `pear`는 없는 키라 새로 추가됩니다. 키는 중복되지 않습니다."
+      choices:
+        - { key: a, label: "{'apple': 3, 'pear': 1}" }
+        - { key: b, label: "{'apple': 5, 'pear': 1}", correct: true }
+        - { key: c, label: "{'apple': 3, 'apple': 5, 'pear': 1}" }
+        - { key: d, label: "KeyError가 발생한다" }

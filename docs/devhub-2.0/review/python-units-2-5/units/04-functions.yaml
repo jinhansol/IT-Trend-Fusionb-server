@@ -1,0 +1,202 @@
+# UNVERIFIED 초안 — AI 작성, 공식 문서 대조 전, 사용자 검토 전. 정식 콘텐츠 아님.
+slug: functions
+position: 4
+title: 함수
+summary: >-
+  반복되는 코드를 def로 묶어 이름을 붙이고, 매개변수로 값을 받아 return으로 결과를 돌려주는 함수를 만듭니다.
+estimated_minutes: 45
+# Technologies this unit teaches (content/technologies.yaml). Load technologies first.
+technologies: [python]
+status: published
+
+activities:
+  - slug: def-and-return
+    kind: reading
+    title: 함수 정의와 return
+    required: true
+    body_md: |
+      **함수**는 이름을 붙인 코드 묶음입니다. `def`로 정의하고, 이름 뒤에 괄호를 붙여 호출합니다.
+
+      ```python
+      def add(a, b):
+          return a + b
+
+      result = add(3, 4)
+      print(result)       # 7
+      print(add(10, 20))  # 30
+      ```
+
+      - `a`, `b`처럼 함수가 받는 이름을 **매개변수**, 호출할 때 넘기는 `3`, `4`를 **인자**라고 합니다.
+      - `return`은 값을 **돌려주고 함수를 즉시 끝냅니다.** `return` 아래 코드는 실행되지 않습니다.
+
+      ### return과 print는 다릅니다
+      `print()`는 화면에 보여 줄 뿐이고, 값을 돌려주지 않습니다.
+      `return`이 없는 함수를 호출한 결과는 "값 없음"을 뜻하는 `None`입니다.
+
+      ```python
+      def show(x):
+          print(x * 2)
+
+      value = show(5)  # 10이 출력됩니다
+      print(value)     # None
+      ```
+
+      계산 결과를 다른 곳에서 쓰려면 `return`으로 돌려주어야 합니다.
+
+  - slug: arguments-and-scope
+    kind: reading
+    title: 기본값, 키워드 인자, 지역 변수
+    required: true
+    body_md: |
+      ### 기본값이 있는 매개변수
+      매개변수에 기본값을 주면 호출할 때 생략할 수 있습니다.
+      기본값이 있는 매개변수는 **없는 매개변수 뒤에** 둡니다.
+
+      ```python
+      def greet(name, greeting="안녕하세요"):
+          return greeting + ", " + name
+
+      print(greet("민수"))          # 안녕하세요, 민수
+      print(greet("민수", "반가워"))  # 반가워, 민수
+      ```
+
+      ### 키워드 인자
+      `이름=값` 형태로 넘기면 순서와 상관없이 매개변수를 지정할 수 있습니다.
+      위치로 넘기는 인자는 키워드 인자보다 **앞에** 와야 합니다.
+
+      ```python
+      print(greet(greeting="좋은 아침", name="지수"))  # 좋은 아침, 지수
+      ```
+
+      ### 지역 변수
+      함수 안에서 대입한 변수는 그 함수 안에서만 쓰입니다.
+      함수 안에서 매개변수에 새 값을 대입해도 **바깥 변수는 바뀌지 않습니다.**
+
+      ```python
+      def double(n):
+          n = n * 2
+          return n
+
+      x = 5
+      print(double(x))  # 10
+      print(x)          # 5
+      ```
+
+  - slug: official-tutorial
+    kind: external
+    title: "공식 튜토리얼: 제어 흐름 도구"
+    url: https://docs.python.org/ko/3/tutorial/controlflow.html
+    required: true
+    body_md: |
+      Python 공식 튜토리얼(한국어)의 4장입니다. 함수 정의와 기본 인자값,
+      키워드 인자를 다루는 절을 읽고 예제를 직접 실행해 보세요.
+
+  - slug: practice-discount
+    kind: exercise
+    title: "직접 해보기: 할인 가격 함수"
+    required: false
+    body_md: |
+      아래 함수를 완성해 보세요.
+
+      ```python
+      def discounted(price, rate=0.1):
+          # 1. price에서 rate만큼 할인한 금액을 정수로 돌려주세요.
+          #    예: discounted(12000) → 10800, discounted(12000, 0.25) → 9000
+          pass
+
+      print(discounted(12000))
+      print(discounted(12000, rate=0.25))
+      ```
+
+      함수 안에서 `return` 대신 `print()`를 쓰면 `print(discounted(12000))`의 출력이 어떻게 달라지는지도 확인해 보세요.
+
+# 초안 — 사용자 검토 전. 정답은 Python 3.12로 확인함.
+quiz:
+  pass_score_percent: 80
+  questions:
+    - key: default-argument
+      type: single
+      prompt: |
+        다음 코드의 출력은 무엇일까요?
+
+        ```python
+        def add(a, b=10):
+            return a + b
+
+        print(add(5))
+        ```
+      explanation: "`b`를 넘기지 않았으므로 기본값 10이 쓰여 5 + 10 = 15를 돌려줍니다."
+      choices:
+        - { key: a, label: "5" }
+        - { key: b, label: "15", correct: true }
+        - { key: c, label: "None" }
+        - { key: d, label: "TypeError가 발생한다" }
+
+    - key: no-return
+      type: single
+      prompt: |
+        다음 코드에서 **마지막 줄**의 출력은 무엇일까요?
+
+        ```python
+        def hello():
+            print("hi")
+
+        result = hello()
+        print(result)
+        ```
+      explanation: "`hello()`는 `hi`를 출력하지만 `return`이 없으므로 돌려주는 값은 `None`입니다."
+      choices:
+        - { key: a, label: "hi" }
+        - { key: b, label: "None", correct: true }
+        - { key: c, label: "아무것도 출력되지 않는다" }
+        - { key: d, label: "NameError가 발생한다" }
+
+    - key: local-variable
+      type: single
+      prompt: |
+        다음 코드의 출력은 무엇일까요?
+
+        ```python
+        def plus_one(x):
+            x = x + 1
+            return x
+
+        n = 5
+        plus_one(n)
+        print(n)
+        ```
+      explanation: "함수 안의 `x`는 지역 변수라 바깥의 `n`은 바뀌지 않습니다. 돌려준 6은 어디에도 담지 않았으므로 `n`은 그대로 5입니다."
+      choices:
+        - { key: a, label: "5", correct: true }
+        - { key: b, label: "6" }
+        - { key: c, label: "None" }
+        - { key: d, label: "NameError가 발생한다" }
+
+    - key: valid-calls
+      type: multiple
+      prompt: "`def area(width, height=1):`로 정의한 함수를 오류 없이 호출하는 것을 **모두** 고르세요."
+      explanation: "`width`는 기본값이 없으니 반드시 넘겨야 합니다. 키워드 인자는 순서를 바꿔도 되지만, 위치 인자가 키워드 인자 뒤에 오면 `SyntaxError`입니다."
+      choices:
+        - { key: a, label: "area(3)", correct: true }
+        - { key: b, label: "area(3, 4)", correct: true }
+        - { key: c, label: "area(height=2, width=3)", correct: true }
+        - { key: d, label: "area()" }
+        - { key: e, label: "area(width=3, 4)" }
+
+    - key: return-ends
+      type: single
+      prompt: |
+        `check(-3)`의 결과는 무엇일까요?
+
+        ```python
+        def check(n):
+            if n > 0:
+                return "양수"
+            return "0 또는 음수"
+        ```
+      explanation: "`-3 > 0`은 거짓이라 첫 `return`을 건너뛰고 두 번째 `return`이 실행됩니다. `n`이 양수였다면 첫 `return`에서 함수가 끝났을 것입니다."
+      choices:
+        - { key: a, label: "\"양수\"" }
+        - { key: b, label: "\"0 또는 음수\"", correct: true }
+        - { key: c, label: "\"양수\"와 \"0 또는 음수\" 둘 다" }
+        - { key: d, label: "None" }
