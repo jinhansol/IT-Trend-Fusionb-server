@@ -10,13 +10,16 @@ from pathlib import Path
 
 import yaml
 
+from app.content_loader.careers import apply_careers, read_careers
 from app.core.config import get_settings
 from app.db.safety import assert_test_database
-from app.db.session import create_db_engine
+from app.db.session import create_db_engine, create_session_factory
 from tests.collect_helpers import collect_all, seed_catalog
 from tests.integration.test_content_api import shift_dates_to_now
 
 TECHNOLOGIES_FILE = Path(__file__).resolve().parents[1] / "content" / "technologies.yaml"
+# Test-only roles (the reviewed content/careers.yaml does not exist yet).
+CAREERS_FILE = Path(__file__).resolve().parent / "fixtures" / "careers" / "e2e-careers.yaml"
 
 
 def main() -> None:
@@ -28,6 +31,8 @@ def main() -> None:
         # technology links; only the sources are the test ones with sample responses.
         technologies = yaml.safe_load(TECHNOLOGIES_FILE.read_text(encoding="utf-8"))
         seed_catalog(engine, technologies=technologies)
+        with create_session_factory(engine).begin() as db:
+            apply_careers(db, read_careers(CAREERS_FILE))
         results = collect_all(engine)
         shift_dates_to_now(engine)
     finally:

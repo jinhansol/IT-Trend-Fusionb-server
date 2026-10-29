@@ -149,12 +149,24 @@ class UnitDef(_Strict):
         return self
 
 
+# Career screens live at /career/explore, /career/roles/<slug> and /career/goals, next
+# to /career/<track>; a track with one of these slugs could not be opened.
+RESERVED_TRACK_SLUGS = ("explore", "roles", "goals")
+
+
 class TrackDef(_Strict):
     slug: Slug
     title: Title
     description: str | None = None
     position: int = Field(ge=1)
     status: Literal["draft", "published", "retired"] = "published"
+
+    @field_validator("slug")
+    @classmethod
+    def _not_reserved(cls, value: str) -> str:
+        if value in RESERVED_TRACK_SLUGS:
+            raise ValueError(f"'{value}' is reserved for Career screens; pick another track slug")
+        return value
 
 
 class TrackContent(_Strict):

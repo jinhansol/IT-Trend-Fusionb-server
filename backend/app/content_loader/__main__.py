@@ -3,6 +3,7 @@
     uv run python -m app.content_loader load content/python [content/other ...] [--dry-run]
     uv run python -m app.content_loader technologies content/technologies.yaml [--dry-run]
     uv run python -m app.content_loader sources content/sources.yaml [--dry-run]
+    uv run python -m app.content_loader careers <careers.yaml> [--dry-run]
 
 All given files are validated first; then everything is written in one
 transaction. --dry-run prints the changes and rolls back.
@@ -15,6 +16,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.content_loader.careers import apply_careers, read_careers
 from app.content_loader.loader import LoadReport, apply_track
 from app.content_loader.schema import ContentError, read_track_directory
 from app.content_loader.taxonomy import (
@@ -35,6 +37,7 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     for name, help_text in (
         ("technologies", "validate and upsert the technology taxonomy file"),
         ("sources", "validate and upsert the collector sources file"),
+        ("careers", "validate and upsert the career roles file (load technologies first)"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("paths", nargs=1, type=Path)
@@ -51,6 +54,9 @@ def _plan(args: argparse.Namespace) -> list[Callable[[Session], LoadReport]]:
     if args.command == "technologies":
         technologies = read_technologies(args.paths[0])
         return [lambda db: apply_technologies(db, technologies)]
+    if args.command == "careers":
+        careers = read_careers(args.paths[0])
+        return [lambda db: apply_careers(db, careers)]
     sources = read_sources(args.paths[0])
     return [lambda db: apply_sources(db, sources)]
 

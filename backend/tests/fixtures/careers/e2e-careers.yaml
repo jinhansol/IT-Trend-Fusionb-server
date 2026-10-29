@@ -1,0 +1,32 @@
+# TEST DATA for the E2E run only (tests/e2e_seed.py). Not service content and not
+# reviewed career information; the reviewed file will be content/careers.yaml.
+roles:
+  - slug: e2e-backend
+    name: 테스트 직무 백엔드
+    position: 1
+    summary: E2E 테스트용 직무입니다.
+    description_md: |
+      E2E 테스트에서 진로 탐색 화면을 확인하기 위한 **가짜 직무 설명**입니다.
+    tasks:
+      - 테스트 업무 하나
+      - 테스트 업무 둘
+    technologies:
+      core: [python, backend]
+      related: [docker]
+    references:
+      - title: 테스트 참고 자료
+        url: https://example.com/e2e-reference
+
+  - slug: e2e-frontend
+    name: 테스트 직무 프론트엔드
+    position: 2
+    summary: 연결된 학습이 없는 E2E 테스트용 직무입니다.
+    description_md: |
+      E2E 테스트용 가짜 직무 설명입니다.
+    tasks:
+      - 테스트 업무
+    technologies:
+      core: [javascript]
+    references:
+      - title: 테스트 참고 자료
+        url: https://example.com/e2e-reference

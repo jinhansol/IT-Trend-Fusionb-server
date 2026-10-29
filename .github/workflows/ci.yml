@@ -44,8 +44,9 @@ jobs:
       - name: Tests (unit + MariaDB integration)
         run: uv run pytest
 
-      # Units reference technologies, so technologies are loaded first. This writes only
-      # to the throwaway MariaDB of this CI run; tracks are then validated with --dry-run.
+      # Units and career roles reference technologies, so technologies are loaded first.
+      # This writes only to the throwaway MariaDB of this CI run; tracks are then
+      # validated with --dry-run. Career roles are loaded once the reviewed file exists.
       - name: Validate learning content files
         env:
           APP_ENV: local
@@ -54,6 +55,7 @@ jobs:
           uv run alembic upgrade head
           uv run python -m app.content_loader technologies content/technologies.yaml
           uv run python -m app.content_loader sources content/sources.yaml
+          if [ -f content/careers.yaml ]; then uv run python -m app.content_loader careers content/careers.yaml; fi
           for track in content/*/; do uv run python -m app.content_loader load "$track" --dry-run; done
 
       - name: Alembic CLI on the dev database
