@@ -244,3 +244,22 @@ def test_omissions_match_what_is_left_after_a_hard_cut():
 def test_omissions_with_no_cut_keep_every_heading():
     extracted = extract_html(article("dev_spring.html"), MAX_INPUT_CHARS["dev"])
     assert extracted.omissions.headings_kept == extracted.omissions.headings_total == 5
+
+
+def test_markdown_table_cells_keep_pipes_in_code_and_escapes():
+    md = (
+        "| 연산자 | 예 |\n|---|---|\n"
+        "| OR | `a | b` |\n"
+        "| 파이프 | x \\| y |\n"
+        "| 긴 코드 | ``x | `y` | z`` |\n"
+        "| 빈칸 |  |\n"
+        "| 끝 파이프 없음 | 값\n"
+    )
+    assert extract_markdown(md, 1000).text == (
+        "| 연산자 | 예 |\n|---|---|\n"
+        "| OR | `a \\| b` |\n"
+        "| 파이프 | x \\| y |\n"
+        "| 긴 코드 | ``x \\| `y` \\| z`` |\n"
+        "| 빈칸 |  |\n"
+        "| 끝 파이프 없음 | 값 |"
+    )

@@ -302,6 +302,37 @@ def _md_inline(text: str, refs: frozenset[str] = frozenset()) -> str:
     return _clean("".join(parts))
 
 
+def _table_cells(row: str) -> list[str]:
+    """Split a table row on "|", except an escaped "\\|" or a "|" inside a code span."""
+    cells, cell, i, fence = [], [], 0, 0  # fence: length of the open backtick run
+    row = row.strip()
+    row = row[1:] if row.startswith("|") else row
+    while i < len(row):
+        ch = row[i]
+        if ch == "\\" and row[i + 1 : i + 2] == "|":
+            cell.append("|")
+            i += 2
+            continue
+        if ch == "`":
+            run = len(row[i:]) - len(row[i:].lstrip("`"))
+            if fence == 0 and "`" * run in row[i + run :]:
+                fence = run
+            elif fence == run:
+                fence = 0
+            cell.append("`" * run)
+            i += run
+            continue
+        if ch == "|" and fence == 0:
+            cells.append("".join(cell))
+            cell = []
+        else:
+            cell.append(ch)
+        i += 1
+    if "".join(cell).strip():  # no closing "|" at the end of the row
+        cells.append("".join(cell))
+    return cells
+
+
 def _definitions(lines: list[str]) -> tuple[list[str], frozenset[str]]:
     """Drop reference definitions ([api]: https://...) outside code fences; return the labels."""
     kept, labels, fence = [], set(), None
@@ -355,7 +386,7 @@ def markdown_blocks(markdown: str) -> list[Block]:
             while i < len(lines) and lines[i].strip().startswith("|"):
                 row = lines[i].strip()
                 if not _MD_TABLE_RULE.match(row):
-                    cells = [inline(c) for c in row.strip("|").split("|")]
+                    cells = [inline(c).replace("|", "\\|") for c in _table_cells(row)]
                     rows.append(cells)
                 i += 1
             blocks.append(Block("table", rows=rows))
