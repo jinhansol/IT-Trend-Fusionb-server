@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     collector_max_response_bytes: int = Field(default=5_000_000, gt=0)
     # Optional free Stack Exchange key: raises the daily quota from 300 to 10,000.
     stackexchange_key: SecretStr | None = None
+    # Gemini (python -m app.jobs translate|summarize only; the web app never calls it).
+    # GEMINI_API_KEY stays in the server environment or the git-ignored backend/.env.
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_timeout_seconds: float = Field(default=30, gt=0)
     # A source with no successful run for this long is shown as delayed.
     feed_stale_after_hours: int = Field(default=24, gt=0)
 
