@@ -1,6 +1,7 @@
 """Collector jobs and the taxonomy/source loaders against the MariaDB test database."""
 
 import copy
+import json
 import threading
 
 import pytest
@@ -14,7 +15,7 @@ from app.content_loader.taxonomy import (
 )
 from app.db.session import create_session_factory
 from app.integrations.http import FetchError
-from app.integrations.sources import adapters
+from app.integrations.sources import SE_QUESTIONS, adapters
 from app.jobs.runner import Collector
 from tests.collect_helpers import (
     SOURCES,
@@ -195,4 +196,104 @@ def test_taxonomy_and_sources_reload_is_idempotent_and_retires(clean_db):
     assert rows(clean_db, "SELECT status FROM technologies WHERE slug = 'rust'") == [("retired",)]
     assert rows(clean_db, "SELECT status, position FROM content_sources WHERE slug = 'devto'") == [
         ("active", 1)
+    ]
+
+
+MIXED_FEED = b"""<?xml version="1.0"?>
+<rss version="2.0"><channel><title>t</title>
+  <item><title>Python 3.14 notes</title><link>https://news.example.com/ok/1</link></item>
+  <item><title>script link</title><link>javascript:alert(1)</link></item>
+  <item><title></title><link>https://news.example.com/ok/2</link></item>
+  <item><title>Kubernetes notes</title><link>https://news.example.com/ok/3</link></item>
+</channel></rss>"""
+
+MIXED_SE = json.dumps(
+    {
+        "items": [
+            {"question_id": 1, "title": "ok", "link": "https://stackoverflow.com/q/1"},
+            {"question_id": 2, "title": "no link"},
+        ]
+    }
+).encode()
+
+ONLY_BAD_FEED = b"""<?xml version="1.0"?>
+<rss version="2.0"><channel><title>t</title>
+  <item><title>a</title><link>javascript:alert(1)</link></item>
+  <item><title>b</title><link>ftp://news.example.com/x</link></item>
+</channel></rss>"""
+
+
+def test_unusable_entries_are_skipped_recorded_and_never_stored(seeded):
+    routes = sample_routes()
+    routes["https://news.example.com/rss"] = MIXED_FEED
+    results = collect_all(seeded, routes)
+
+    news = results["sample-news"]
+    assert (news.status, news.fetched, news.inserted, news.skipped) == ("succeeded", 2, 2, 2)
+    assert rows(
+        seeded,
+        "SELECT j.status, j.fetched_count, j.inserted_count, j.failed_count, j.error_summary "
+        "FROM job_runs j JOIN content_sources s ON s.id = j.source_id "
+        "WHERE s.slug = 'sample-news'",
+    ) == [("succeeded", 2, 2, 2, "skipped 2 entries: link is not http(s) 1, no title 1")]
+    # Only http(s) links reach the table, and the good entries are tagged as before.
+    assert (
+        scalar(seeded, "SELECT COUNT(*) FROM contents WHERE url NOT REGEXP '^https?://[^/]+'") == 0
+    )
+    assert tags_of(seeded, "Python 3.14 notes") == ["python"]
+    assert tags_of(seeded, "Kubernetes notes") == ["kubernetes"]
+    # Other sources are unaffected.
+    assert results["devto"].status == "succeeded" and results["devto"].skipped == 0
+
+
+def test_a_response_with_only_unusable_entries_fails_the_source(seeded):
+    routes = sample_routes()
+    routes["https://news.example.com/rss"] = ONLY_BAD_FEED
+    results = collect_all(seeded, routes)
+
+    news = results["sample-news"]
+    assert news.status == "failed"
+    assert news.error == (
+        "UnusableResponse: no usable entries (skipped 2 entries: link is not http(s) 2)"
+    )
+    assert rows(
+        seeded,
+        "SELECT j.status, j.failed_count FROM job_runs j "
+        "JOIN content_sources s ON s.id = j.source_id WHERE s.slug = 'sample-news'",
+    ) == [("failed", 2)]
+    assert results["sample-blog"].status == "succeeded"
+
+
+def test_a_broken_api_entry_does_not_cost_the_rest_of_the_source(seeded):
+    latest = json.loads(fixture("devto_latest.json"))
+    latest.append({"id": 9999, "title": "no url here"})
+    routes = sample_routes()
+    routes["https://dev.to/api/articles"] = lambda params: (
+        fixture("devto_top.json") if "top" in params else json.dumps(latest).encode()
+    )
+    results = collect_all(seeded, routes)
+
+    assert (results["devto"].status, results["devto"].inserted) == ("succeeded", 3)
+    assert results["devto"].skipped == 1
+    assert scalar(seeded, "SELECT COUNT(*) FROM contents WHERE external_id = '9999'") == 0
+
+
+def test_failed_count_means_skipped_entries_in_every_outcome(seeded):
+    """job_runs.failed_count counts entries left out, never "the source failed" (see status)."""
+    routes = sample_routes()
+    routes["https://news.example.com/rss"] = FetchError("HTTP 503 from news.example.com/rss")
+    routes["https://blog.example.com/atom"] = ONLY_BAD_FEED
+    routes[SE_QUESTIONS] = MIXED_SE
+    collect_all(seeded, routes)
+
+    assert rows(
+        seeded,
+        "SELECT s.slug, j.status, j.failed_count FROM job_runs j "
+        "JOIN content_sources s ON s.id = j.source_id ORDER BY s.slug",
+    ) == [
+        ("devto", "succeeded", 0),  # clean run
+        ("hackernews", "succeeded", 0),
+        ("sample-blog", "failed", 2),  # every entry unusable
+        ("sample-news", "failed", 0),  # the source could not be read: no entries to count
+        ("stackoverflow", "succeeded", 1),  # one entry skipped, the rest saved
     ]

@@ -4,6 +4,9 @@
   of the same source record "skipped" instead of collecting twice.
 - Every run is recorded in job_runs, so "failed" and "nothing new" are different.
 - One failing source never stops the others.
+- Inside a source, entries without a usable link or title are skipped and counted
+  (job_runs.failed_count, reasons in error_summary); the rest are saved. A response in
+  which every entry is unusable fails the source, since that means the format changed.
 - Fetching happens outside any transaction; saving is one transaction per source.
 """
 
@@ -14,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.types import utc_now
 from app.integrations.http import Fetcher
-from app.integrations.sources import Adapter, CollectedItem, SourceConfig
+from app.integrations.sources import Adapter, Batch, SourceConfig
 from app.jobs.store import store_items
 from app.models.content import ContentSource, JobRun
 from app.services.tagging import load_tagger
@@ -31,14 +34,17 @@ class UnknownSource(ValueError):
 class SourceResult:
     slug: str
     status: str  # succeeded | failed | skipped | dry-run
-    fetched: int = 0
+    fetched: int = 0  # usable entries
     inserted: int = 0
     updated: int = 0
+    skipped: int = 0  # entries left out because they were unusable
     error: str | None = None
     sample_titles: list[str] = field(default_factory=list)
 
     def line(self) -> str:
         counts = f"fetched {self.fetched}, new {self.inserted}, updated {self.updated}"
+        if self.skipped:
+            counts += f", skipped {self.skipped}"
         detail = f" — {self.error}" if self.error else ""
         return f"{self.slug:<16} {self.status:<9} {counts}{detail}"
 
@@ -60,6 +66,23 @@ def _error_text(exc: Exception) -> str:
     return f"{type(exc).__name__}: {exc}"[:MAX_ERROR_CHARS]
 
 
+def _skip_text(batch: Batch) -> str | None:
+    """'skipped 2 entries: no link 1, link is not http(s) 1' (most frequent first)."""
+    total = sum(batch.skipped.values())
+    if not total:
+        return None
+    reasons = ", ".join(f"{reason} {n}" for reason, n in batch.skipped.most_common())
+    return f"skipped {total} {'entry' if total == 1 else 'entries'}: {reasons}"[:MAX_ERROR_CHARS]
+
+
+class UnusableResponse(Exception):
+    """Every entry of the response was skipped."""
+
+    def __init__(self, message: str | None, skipped: int) -> None:
+        super().__init__(f"no usable entries ({message})")
+        self.skipped = skipped
+
+
 class Collector:
     def __init__(self, engine: Engine, fetcher: Fetcher, adapters: dict[str, Adapter]) -> None:
         self._engine = engine
@@ -78,17 +101,25 @@ class Collector:
                 return rows
             return list(db.scalars(query.where(ContentSource.status == "active")))
 
-    def fetch(self, source: ContentSource) -> list[CollectedItem]:
-        return self._adapters[source.adapter](self._fetcher, _config(source))
+    def fetch(self, source: ContentSource) -> Batch:
+        batch = self._adapters[source.adapter](self._fetcher, _config(source))
+        if batch.skipped and not batch.items:
+            raise UnusableResponse(_skip_text(batch), sum(batch.skipped.values()))
+        return batch
 
     def dry_run(self, source: ContentSource) -> SourceResult:
         """Fetch and parse only. Nothing is written, not even a job_runs row."""
         try:
-            items = self.fetch(source)
+            batch = self.fetch(source)
         except Exception as exc:  # report any adapter failure
             return SourceResult(source.slug, "failed", error=_error_text(exc))
         return SourceResult(
-            source.slug, "dry-run", fetched=len(items), sample_titles=[i.title for i in items[:3]]
+            source.slug,
+            "dry-run",
+            fetched=len(batch.items),
+            skipped=sum(batch.skipped.values()),
+            error=_skip_text(batch),
+            sample_titles=[i.title for i in batch.items[:3]],
         )
 
     def run(self, source: ContentSource) -> SourceResult:
@@ -123,15 +154,18 @@ class Collector:
             db.add(job)
         result = SourceResult(source.slug, "running")
         try:
-            items = self.fetch(source)
-            result.fetched = len(items)
+            batch = self.fetch(source)
+            result.fetched = len(batch.items)
+            result.skipped = sum(batch.skipped.values())
             with self._sessions.begin() as db:
                 db_source = db.get(ContentSource, source.id)
-                stored = store_items(db, db_source, items, load_tagger(db))
+                stored = store_items(db, db_source, batch.items, load_tagger(db))
             result.inserted, result.updated = stored.inserted, stored.updated
-            result.status = "succeeded"
+            result.status, result.error = "succeeded", _skip_text(batch)
         except Exception as exc:  # a source failure is recorded, not raised
             result.status, result.error = "failed", _error_text(exc)
+            result.inserted = result.updated = 0
+            result.skipped = getattr(exc, "skipped", 0)
 
         with self._sessions.begin() as db:
             row = db.get(JobRun, job.id)
@@ -140,6 +174,6 @@ class Collector:
             row.fetched_count = result.fetched
             row.inserted_count = result.inserted
             row.updated_count = result.updated
-            row.failed_count = 1 if result.status == "failed" else 0
+            row.failed_count = result.skipped
             row.error_summary = result.error
         return result

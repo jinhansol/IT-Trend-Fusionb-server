@@ -186,5 +186,6 @@ class JobRun(Base):
     fetched_count: Mapped[int] = mapped_column(Integer, default=0)
     inserted_count: Mapped[int] = mapped_column(Integer, default=0)
     updated_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Entries skipped because they lacked a usable link or title (reasons in error_summary).
     failed_count: Mapped[int] = mapped_column(Integer, default=0)
     error_summary: Mapped[str | None] = mapped_column(String(1000))
