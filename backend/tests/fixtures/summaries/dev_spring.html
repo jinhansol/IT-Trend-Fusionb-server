@@ -1,0 +1,95 @@
+<html><body>
+<nav>블로그 홈 · 카테고리</nav>
+<article>
+<h1>Spring Boot 3에서 가상 스레드로 블로킹 I/O 처리량 늘리기 (가상 기술 블로그)</h1>
+<p>이 글은 테스트용으로 직접 작성한 가상의 글이다. Java 21의 가상 스레드를 Spring Boot 3.2 애플리케이션에 적용해, 블로킹 JDBC 호출이 많은 가상의 주문 서비스에서 처리량을 높인 과정을 정리한다. 가상 스레드는 운영체제 스레드보다 생성 비용이 낮아, 요청마다 스레드를 하나씩 쓰는 기존 모델을 그대로 유지하면서 동시 처리 수를 늘릴 수 있다.</p>
+<h2>설정</h2>
+<p>Spring Boot 3.2부터는 설정 한 줄로 톰캣 요청 처리와 비동기 작업 실행기에 가상 스레드를 쓸 수 있다.</p>
+<pre><code class="language-yaml">spring:
+  threads:
+    virtual:
+      enabled: true</code></pre>
+<h3>설정 항목 정리</h3>
+<table><thead><tr><th>항목</th><th>값</th><th>설명</th></tr></thead><tbody><tr><td>설정 0</td><td>값 0</td><td>설명 0</td></tr>
+<tr><td>설정 1</td><td>값 1</td><td>설명 1</td></tr>
+<tr><td>설정 2</td><td>값 2</td><td>설명 2</td></tr>
+<tr><td>설정 3</td><td>값 3</td><td>설명 3</td></tr>
+<tr><td>설정 4</td><td>값 4</td><td>설명 4</td></tr>
+<tr><td>설정 5</td><td>값 5</td><td>설명 5</td></tr>
+<tr><td>설정 6</td><td>값 6</td><td>설명 6</td></tr>
+<tr><td>설정 7</td><td>값 7</td><td>설명 7</td></tr>
+<tr><td>설정 8</td><td>값 8</td><td>설명 8</td></tr>
+<tr><td>설정 9</td><td>값 9</td><td>설명 9</td></tr>
+<tr><td>설정 10</td><td>값 10</td><td>설명 10</td></tr>
+<tr><td>설정 11</td><td>값 11</td><td>설명 11</td></tr></tbody></table>
+<h2>구현</h2>
+<p>주문 조회 서비스는 다음 순서로 바꿨다.</p>
+<ol><li>JDBC 호출을 감싸던 별도 스레드 풀을 제거한다.</li><li>synchronized 블록을 ReentrantLock으로 바꾼다.</li><li>커넥션 풀 크기를 데이터베이스 한도에 맞춘다.</li></ol>
+<pre class="language-java"><code>public class OrderService {
+        log.info("step 0", 0);
+        log.info("step 1", 1);
+        log.info("step 2", 2);
+        log.info("step 3", 3);
+        log.info("step 4", 4);
+        log.info("step 5", 5);
+        log.info("step 6", 6);
+        log.info("step 7", 7);
+        log.info("step 8", 8);
+        log.info("step 9", 9);
+        log.info("step 10", 10);
+        log.info("step 11", 11);
+        log.info("step 12", 12);
+        log.info("step 13", 13);
+        log.info("step 14", 14);
+        log.info("step 15", 15);
+        log.info("step 16", 16);
+        log.info("step 17", 17);
+        log.info("step 18", 18);
+        log.info("step 19", 19);
+        log.info("step 20", 20);
+        log.info("step 21", 21);
+        log.info("step 22", 22);
+        log.info("step 23", 23);
+        log.info("step 24", 24);
+        log.info("step 25", 25);
+        log.info("step 26", 26);
+        log.info("step 27", 27);
+        log.info("step 28", 28);
+        log.info("step 29", 29);
+        log.info("step 30", 30);
+        log.info("step 31", 31);
+        log.info("step 32", 32);
+        log.info("step 33", 33);
+        log.info("step 34", 34);
+        log.info("step 35", 35);
+        log.info("step 36", 36);
+        log.info("step 37", 37);
+        log.info("step 38", 38);
+        log.info("step 39", 39);
+        log.info("step 40", 40);
+        log.info("step 41", 41);
+        log.info("step 42", 42);
+        log.info("step 43", 43);
+        log.info("step 44", 44);
+        log.info("step 45", 45);
+        log.info("step 46", 46);
+        log.info("step 47", 47);
+        log.info("step 48", 48);
+        log.info("step 49", 49);
+        log.info("step 50", 50);
+        log.info("step 51", 51);
+        log.info("step 52", 52);
+        log.info("step 53", 53);
+        log.info("step 54", 54);
+        log.info("step 55", 55);
+        log.info("step 56", 56);
+        log.info("step 57", 57);
+        log.info("step 58", 58);
+        log.info("step 59", 59);
+}</code></pre>
+<div class="warning"><p>synchronized 블록 안에서 블로킹 I/O를 하면 가상 스레드가 캐리어 스레드에 고정(pinning)되어 이점이 사라진다. 이 글의 측정은 가상의 테스트 환경 기준이다.</p></div>
+<h2>한계</h2>
+<p>가상 스레드는 CPU 연산이 많은 작업의 속도를 높이지 않는다. 또한 동시 요청이 늘어나면 데이터베이스 커넥션이 먼저 부족해지므로, 커넥션 풀 크기와 데이터베이스 최대 연결 수를 함께 조정해야 한다. 이 글에서는 커넥션 풀 크기를 50으로 두었다.</p>
+</article>
+<footer>© 가상 블로그</footer>
+</body></html>
