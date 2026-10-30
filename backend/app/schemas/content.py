@@ -18,9 +18,16 @@ class TechnologyRef(BaseModel):
     name: str
 
 
+class LicenseRef(BaseModel):
+    name: str
+    url: str
+
+
 class SourceRef(BaseModel):
     slug: str
     name: str
+    # The license of the source's pages (e.g. CC BY 4.0), when AI summaries may be made.
+    license: LicenseRef | None = None
 
 
 class TranslationRef(BaseModel):

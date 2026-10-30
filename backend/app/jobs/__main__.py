@@ -4,11 +4,13 @@
     uv run python -m app.jobs collect --source devto     one or more sources
     uv run python -m app.jobs collect --dry-run          fetch and parse only, save nothing
     uv run python -m app.jobs translate --max-calls 4    Korean titles for English news
+    uv run python -m app.jobs summarize --max-calls 1    summaries of web.dev articles
     uv run python -m app.jobs summarize --body URL=FILE  summaries of bodies held locally
 
 translate and summarize call Gemini (GEMINI_API_KEY, GEMINI_MODEL) for sources that have
-ai_translation / ai_summary on, at most --max-calls requests per run. summarize never
-downloads articles: each body is a local HTML or Markdown file given for its stored URL.
+ai_translation / ai_summary on, at most --max-calls requests per run. Without --body,
+summarize fetches article pages only for the web.dev source (app/jobs/article_bodies.py);
+with --body it uses the given local HTML or Markdown files and downloads nothing.
 Exit status is 1 when any source or item failed, 2 for a usage or setup error.
 """
 
@@ -21,6 +23,7 @@ from app.db.session import create_db_engine
 from app.integrations.gemini import GeminiNotConfigured, gemini_client
 from app.integrations.http import HttpFetcher
 from app.integrations.sources import adapters
+from app.jobs.article_bodies import WEBDEV_HOSTS, finished_ids, webdev_bodies
 from app.jobs.runner import Collector, UnknownSource
 from app.jobs.summarize import summarize_contents
 from app.jobs.translate import translate_news
@@ -92,12 +95,19 @@ def _model_job(args, settings) -> int:
 
     engine = create_db_engine(settings)
     budget = Budget(max_calls=args.max_calls)
+    fetcher = None
     try:
         if args.command == "translate":
             result = translate_news(engine, client, budget)
-        else:
+        elif bodies:
             result = summarize_contents(engine, client, lambda item: bodies.get(item.url), budget)
+        else:
+            fetcher = HttpFetcher(settings, allowed_hosts=WEBDEV_HOSTS)
+            provider = webdev_bodies(fetcher, finished_ids(engine))
+            result = summarize_contents(engine, client, provider, budget)
     finally:
+        if fetcher is not None:
+            fetcher.close()
         engine.dispose()
     print(f"database: {settings.database_name} — model {client.model} — {result}")
     if client.last_error:

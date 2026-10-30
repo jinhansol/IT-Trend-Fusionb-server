@@ -68,7 +68,22 @@ function DevFields({ content }) {
   );
 }
 
-export default function AiSummary({ summary }) {
+// Shown when the source's pages carry a license (e.g. CC BY 4.0): credit and a note that
+// the summary changes the original.
+function LicenseNote({ license }) {
+  if (!license) return null;
+  return (
+    <p className="mt-1 text-[11px] text-slate-500">
+      원문 라이선스{" "}
+      <a href={license.url} target="_blank" rel="noopener noreferrer license" className="underline hover:text-indigo-600">
+        {license.name}
+      </a>{" "}
+      · 이 요약은 AI가 원문을 요약·재구성한 것으로 원문과 다릅니다.
+    </p>
+  );
+}
+
+export default function AiSummary({ summary, license = null }) {
   const [open, setOpen] = useState(false);
   const panel = useId();
   const { content } = summary;
@@ -79,6 +94,7 @@ export default function AiSummary({ summary }) {
         {summary.partial_input && <span>글 일부 기반</span>}
       </p>
       <p className="font-medium text-slate-800">{content.headline}</p>
+      <LicenseNote license={license} />
       <button
         type="button"
         aria-expanded={open}

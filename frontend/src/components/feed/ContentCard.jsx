@@ -38,7 +38,7 @@ export default function ContentCard({ item, metrics = [], now }) {
         </a>
       </h3>
       {item.ai_summary ? (
-        <AiSummary summary={item.ai_summary} />
+        <AiSummary summary={item.ai_summary} license={item.source.license} />
       ) : (
         excerpt && <p className="text-sm text-slate-600 leading-relaxed line-clamp-3 mb-3">{excerpt}</p>
       )}

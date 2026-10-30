@@ -116,6 +116,11 @@ def apply_technologies(db: Session, content: TechnologiesFile) -> LoadReport:
 # --- sources ------------------------------------------------------------------------------
 
 
+class RssOptions(_Strict):
+    # The license the source's pages carry, shown with AI summaries made from them.
+    license: Literal["CC-BY-4.0"] | None = None
+
+
 class DevtoOptions(_Strict):
     tag: Slug | None = None
     # Dev.to "top" articles of the last N days; omitted means the latest articles.
@@ -134,7 +139,7 @@ class StackOverflowOptions(_Strict):
 
 
 _OPTIONS = {
-    "rss": None,
+    "rss": RssOptions,
     "devto": DevtoOptions,
     "hackernews": HackerNewsOptions,
     "stackoverflow": StackOverflowOptions,
@@ -177,13 +182,9 @@ class SourceDef(_Strict):
             raise ValueError("ai_translation is only for English news sources")
         if self.ai_summary and self.kind not in ("news", "blog"):
             raise ValueError("ai_summary is only for news and blog sources")
+        # Store the options with defaults filled in, so the collector reads one shape.
         model = _OPTIONS[self.adapter]
-        if model is None:
-            if self.options:
-                raise ValueError("rss sources take no options")
-        else:
-            # Store the options with defaults filled in, so the collector reads one shape.
-            self.options = model.model_validate(self.options).model_dump(exclude_none=True)
+        self.options = model.model_validate(self.options).model_dump(exclude_none=True)
         return self
 
 

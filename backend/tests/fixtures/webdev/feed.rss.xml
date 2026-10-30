@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Synthetic feed in the shape of https://web.dev/static/blog/feed.xml. Not real posts. -->
+<rss version="2.0">
+    <channel>
+        <title>web.dev: Blog</title>
+        <link>https://web.dev/blog/</link>
+        <description>Synthetic test feed.</description>
+        <language>en-US</language>
+        <item>
+            <title><![CDATA[Virtual threads in a sample Spring service]]></title>
+            <link>https://web.dev/blog/sample-virtual-threads?hl=en</link>
+            <guid>https://web.dev/blog/sample-virtual-threads?hl=en</guid>
+            <pubDate>Thu, 29 Oct 2026 07:00:00 GMT</pubDate>
+            <description><![CDATA[A synthetic post used by the DevHub tests.]]></description>
+        </item>
+        <item>
+            <title><![CDATA[A second sample post]]></title>
+            <link>https://web.dev/blog/sample-second-post?hl=en</link>
+            <guid>https://web.dev/blog/sample-second-post?hl=en</guid>
+            <pubDate>Wed, 28 Oct 2026 07:00:00 GMT</pubDate>
+            <description><![CDATA[Another synthetic post.]]></description>
+        </item>
+    </channel>
+</rss>
