@@ -60,6 +60,11 @@ RETRY_NOTE = "이전 응답이 형식에 맞지 않았다. 설명 없이 형식�
 _FRAME_TAG = re.compile(r"<\s*(/?)\s*(article|title|body)\b", re.IGNORECASE)
 
 
+USER_TEMPLATE = (
+    "다음 자료를 요약하라.\n<article>\n<title>{title}</title>\n<body>\n{body}\n</body>\n</article>"
+)
+
+
 @dataclass(frozen=True)
 class Prompt:
     system: str
@@ -68,8 +73,11 @@ class Prompt:
 
 
 def defuse(text: str) -> str:
-    """Make article text unable to end the data block early."""
-    return _FRAME_TAG.sub(lambda m: f"<{m.group(1)}_{m.group(2)}", text)
+    """Make article text unable to end the data block early.
+
+    The "<" of a look-alike tag becomes "‹", so the text keeps its length and the
+    prompt stays within the input limits."""
+    return _FRAME_TAG.sub(lambda m: "‹" + m.group(0)[1:], text)
 
 
 def build_prompt(kind: str, title: str, text: str, retry: bool = False) -> Prompt:
@@ -77,11 +85,5 @@ def build_prompt(kind: str, title: str, text: str, retry: bool = False) -> Promp
     system = f"{_COMMON_RULES}\n\n{_KIND_NOTES[kind]}\n\n출력 형식:\n{schema}"
     if retry:
         system += f"\n\n{RETRY_NOTE}"
-    user = (
-        "다음 자료를 요약하라.\n"
-        "<article>\n"
-        f"<title>{defuse(title)}</title>\n"
-        f"<body>\n{defuse(text)}\n</body>\n"
-        "</article>"
-    )
+    user = USER_TEMPLATE.format(title=defuse(title.strip()), body=defuse(text))
     return Prompt(system=system, user=user, version=PROMPT_VERSIONS[kind])

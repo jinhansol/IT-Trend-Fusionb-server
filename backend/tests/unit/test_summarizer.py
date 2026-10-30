@@ -295,3 +295,41 @@ def test_a_reused_summary_cannot_change_the_stored_one():
     reused.payload["headline"] = "changed by a caller"
 
     assert s.summarize(news_ko()).payload["headline"] == NEWS_KO["headline"]
+
+
+# --- review fixes (PR #1) -----------------------------------------------------------------
+
+
+def test_neither_the_first_nor_a_reused_result_can_change_the_cache():
+    s, llm, _ = summarizer(DEV_SPRING)
+    first = s.summarize(dev_spring())
+    first.payload["implementation"]["steps"].append("added by a caller")
+    first.payload["key_concepts"][0]["name"] = "changed"
+    first.warnings.append("w")
+    first.code_languages.append("cobol")
+    first.omissions.chars_after = -1
+
+    reused = s.summarize(dev_spring())
+    assert reused.payload == DEV_SPRING
+    assert reused.warnings == [] and reused.code_languages == ["java", "yaml"]
+    assert reused.omissions.chars_after > 0
+
+    reused.payload["implementation"]["steps"].clear()
+    reused.omissions.code_lines_kept = 0
+    again = s.summarize(dev_spring())
+    assert again.payload["implementation"]["steps"] == DEV_SPRING["implementation"]["steps"]
+    assert again.omissions.code_lines_kept == 44
+    assert len(llm.requests) == 1
+
+
+@pytest.mark.parametrize(
+    ("length", "called"),
+    [(1, True), (499, True), (500, True), (501, False), (25_000, False)],
+)
+def test_title_length_boundary(length, called):
+    s, llm, _ = summarizer(NEWS_KO)
+    outcome = s.summarize(news_ko(title="가" * length))
+
+    assert bool(llm.requests) is called
+    if not called:
+        assert (outcome.status, outcome.skip_reason) == ("skipped", "invalid_input")

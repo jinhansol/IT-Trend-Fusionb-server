@@ -43,6 +43,7 @@ _VOID = {"area", "base", "br", "col", "hr", "img", "input", "link", "meta", "sou
 _BLOCKS = {"p", "div", "section", "article", "main", "li", "dd", "dt", "figure", "figcaption"}
 _LANGUAGE = re.compile(r"(?:language|lang)-([\w+#.-]+)")
 _SPACES = re.compile(r"[ \t\r\f\v]+")
+_CUT = "\n… (생략)"
 _NOTE_LABEL = re.compile(r"^\**\s*(주의|경고|참고|note|warning|caution|tip)\s*\**\s*[:：]\s*", re.I)
 
 
@@ -63,6 +64,7 @@ class Omissions:
     chars_before: int = 0
     chars_after: int = 0
     headings_total: int = 0
+    headings_kept: int = 0  # below headings_total only when the headings alone exceed the cap
     sections_total: int = 0
     sections_truncated: int = 0
     sections_dropped: int = 0  # body fully removed (the heading stays)
@@ -256,26 +258,76 @@ def html_blocks(html: str) -> list[Block]:
 
 # --- Markdown -----------------------------------------------------------------------------
 
-_MD_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
+_MD_CODE_SPAN = re.compile(r"(`+)(.+?)\1")
+_MD_IMAGE = re.compile(r"!\[([^\]]*)\](?:\([^)]*\)|\[[^\]]*\])")
 _MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
-_MD_HTML = re.compile(r"<[^>]+>")
+_MD_REF_LINK = re.compile(r"\[([^\]]+)\]\[[^\]]*\]")  # [text][ref] and [text][]
+_MD_SHORTCUT = re.compile(r"\[([^\]]+)\](?![(\[:])")  # [ref], only when [ref]: is defined
+_MD_DEFINITION = re.compile(r"^ {0,3}\[([^\]]+)\]:\s*\S")
+_MD_AUTOLINK = re.compile(r"<(?:https?|ftp|mailto):[^>\s]*>", re.IGNORECASE)
+_MD_DROP = re.compile(r"<(script|style|iframe|noscript)\b[^>]*>.*?</\1\s*>", re.I | re.S)
+# Only real HTML element names, lower case: List<User> or Map<String, Integer> stay.
+_HTML_NAMES = (
+    "a abbr article aside audio b blockquote br button center code del details div em "
+    "embed figcaption figure font footer form h1 h2 h3 h4 h5 h6 header hr i iframe img "
+    "input ins kbd label li mark nav noscript object ol p picture pre q s script section "
+    "select small source span strong style sub summary sup table tbody td textarea tfoot "
+    "th thead tr u ul video"
+).split()
+_MD_HTML = re.compile(r"</?(?:" + "|".join(_HTML_NAMES) + r")(?=[\s/>])[^<>]*>")
 _MD_LIST = re.compile(r"^(\s*)([-*+]|\d+[.)])\s+(.*)$")
 _MD_TABLE_RULE = re.compile(r"^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$")
 
 
-def _md_inline(text: str) -> str:
+def _md_plain(text: str, refs: frozenset[str]) -> str:
+    text = _MD_DROP.sub(" ", text)
     text = _MD_IMAGE.sub(lambda m: f"[이미지: {m.group(1)}]" if m.group(1) else "", text)
     text = _MD_LINK.sub(r"\1", text)
-    return _clean(_MD_HTML.sub(" ", text))
+    text = _MD_REF_LINK.sub(r"\1", text)
+    text = _MD_SHORTCUT.sub(
+        lambda m: m.group(1) if m.group(1).lower() in refs else m.group(0), text
+    )
+    text = _MD_AUTOLINK.sub(" ", text)
+    return _MD_HTML.sub(" ", text)
+
+
+def _md_inline(text: str, refs: frozenset[str] = frozenset()) -> str:
+    """Inline Markdown -> plain text. Code spans are kept exactly as written."""
+    parts, last = [], 0
+    for match in _MD_CODE_SPAN.finditer(text):
+        parts.append(_md_plain(text[last : match.start()], refs))
+        parts.append(match.group(0))
+        last = match.end()
+    parts.append(_md_plain(text[last:], refs))
+    return _clean("".join(parts))
+
+
+def _definitions(lines: list[str]) -> tuple[list[str], frozenset[str]]:
+    """Drop reference definitions ([api]: https://...) outside code fences; return the labels."""
+    kept, labels, fence = [], set(), None
+    for line in lines:
+        stripped = line.strip()
+        if fence is None and stripped[:3] in ("```", "~~~"):
+            fence = stripped[:3]
+        elif fence is not None and stripped.startswith(fence):
+            fence = None
+        elif fence is None and (match := _MD_DEFINITION.match(line)):
+            labels.add(match.group(1).lower())
+            continue
+        kept.append(line)
+    return kept, frozenset(labels)
 
 
 def markdown_blocks(markdown: str) -> list[Block]:
     blocks: list[Block] = []
-    lines = markdown.replace("\r\n", "\n").split("\n")
+    lines, refs = _definitions(markdown.replace("\r\n", "\n").split("\n"))
     paragraph: list[str] = []
 
+    def inline(text: str) -> str:
+        return _md_inline(text, refs)
+
     def flush():
-        text = _md_inline(" ".join(paragraph))
+        text = inline(" ".join(paragraph))
         paragraph.clear()
         if text:
             blocks.append(Block("text", text=text))
@@ -296,16 +348,14 @@ def markdown_blocks(markdown: str) -> list[Block]:
         elif re.match(r"^#{1,6}\s", stripped):
             flush()
             hashes = len(stripped) - len(stripped.lstrip("#"))
-            blocks.append(
-                Block("heading", text=_md_inline(stripped[hashes:]), level=min(hashes, 4))
-            )
+            blocks.append(Block("heading", text=inline(stripped[hashes:]), level=min(hashes, 4)))
         elif stripped.startswith("|"):
             flush()
             rows = []
             while i < len(lines) and lines[i].strip().startswith("|"):
                 row = lines[i].strip()
                 if not _MD_TABLE_RULE.match(row):
-                    cells = [_md_inline(c) for c in row.strip("|").split("|")]
+                    cells = [inline(c) for c in row.strip("|").split("|")]
                     rows.append(cells)
                 i += 1
             blocks.append(Block("table", rows=rows))
@@ -316,7 +366,7 @@ def markdown_blocks(markdown: str) -> list[Block]:
             while i < len(lines) and lines[i].strip().startswith(">"):
                 quote.append(lines[i].strip().lstrip(">").strip())
                 i += 1
-            text = _md_inline(" ".join(quote))
+            text = inline(" ".join(quote))
             if text:
                 blocks.append(Block("note", text=text))
             continue
@@ -325,7 +375,7 @@ def markdown_blocks(markdown: str) -> list[Block]:
             items, ordered = [], bool(re.match(r"\s*\d", line))
             while i < len(lines) and (match := _MD_LIST.match(lines[i])):
                 indent = "  " * (len(match.group(1)) // 2)
-                items.append(indent + _md_inline(match.group(3)))
+                items.append(indent + inline(match.group(3)))
                 i += 1
             blocks.append(Block("list", items=items, ordered=ordered))
             continue
@@ -437,8 +487,19 @@ def render(blocks: list[Block], max_chars: int) -> Extracted:
 
     rendered = [b for h, body in sections for b in ([h] if h else []) + body]
     text = "\n\n".join(_render_block(b) for b in rendered)
-    if len(text) > max_chars:  # only headings left and still too long
-        text = text[:max_chars].rstrip() + "\n… (생략)"
+    visible = len(text)
+    if len(text) > max_chars:  # only headings left and still too long: cut, marker included
+        keep = max_chars - len(_CUT)
+        # End at a block boundary, so no heading is shown half cut.
+        boundary = text.rfind("\n\n", 0, keep + 1) if keep > 0 else -1
+        visible = boundary if boundary > 0 else max(0, keep)
+        text = text[:visible] + _CUT if keep > 0 else text[:max_chars]
+    offset = 0
+    for block in rendered:
+        piece = _render_block(block)
+        if block.kind == "heading" and offset + len(piece) <= visible:
+            om.headings_kept += 1
+        offset += len(piece) + 2
     om.chars_after = sum(
         len(_render_block(b)) for b in rendered if b.kind != "heading" and b is not marker
     )

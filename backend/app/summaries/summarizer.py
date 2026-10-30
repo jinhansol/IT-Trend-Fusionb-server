@@ -24,6 +24,7 @@ from app.summaries.extract import Extracted, Omissions, extract_html, extract_ma
 from app.summaries.policy import (
     MAX_INPUT_CHARS,
     MAX_SOURCE_CHARS,
+    MAX_TITLE_CHARS,
     Budget,
     input_hash,
     sufficiency,
@@ -133,8 +134,8 @@ class Summarizer:
 
         key = (item.kind, outcome.input_hash, outcome.prompt_version)
         if key in self.done:
-            done = self.done[key]
-            return replace(done, reused=True, attempts=0, payload=copy.deepcopy(done.payload))
+            # A deep copy: nothing a caller does to the result can change the stored one.
+            return replace(copy.deepcopy(self.done[key]), reused=True, attempts=0)
 
         if self._budget.circuit_open():
             outcome.skip_reason = "circuit_open"
@@ -147,7 +148,7 @@ class Summarizer:
         if outcome.status != "skipped" or outcome.attempts:
             self._budget.record_outcome(failed=outcome.status == "failed")
         if outcome.status == "done":
-            self.done[key] = outcome
+            self.done[key] = copy.deepcopy(outcome)
         return outcome
 
     def _extract(self, item: SummaryInput) -> Extracted | None:
@@ -156,7 +157,9 @@ class Summarizer:
         except SkipEntry:
             return None
         sources = [s for s in (item.html, item.markdown) if s is not None]
-        if len(sources) != 1 or not item.title.strip() or len(sources[0]) > MAX_SOURCE_CHARS:
+        if len(sources) != 1 or len(sources[0]) > MAX_SOURCE_CHARS:
+            return None
+        if not item.title.strip() or len(item.title.strip()) > MAX_TITLE_CHARS:
             return None
         limit = MAX_INPUT_CHARS[item.kind]
         if item.html is not None:

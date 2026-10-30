@@ -14,6 +14,8 @@ from app.summaries.extract import Extracted
 MAX_INPUT_CHARS = {"news": 6000, "dev": 12000}
 # Raw HTML/Markdown larger than this is refused before parsing.
 MAX_SOURCE_CHARS = 2_000_000
+# A longer title is refused, not cut (contents.title holds 500).
+MAX_TITLE_CHARS = 500
 # A summary needs at least this much article text, and News at least 3 paragraphs [제안값].
 MIN_CHARS = {"news": 800, "dev": 1500}
 MIN_PARAGRAPHS = {"news": 3, "dev": 1}
@@ -40,6 +42,8 @@ def input_hash(kind: str, title: str, text: str) -> str:
 def sufficiency(kind: str, extracted: Extracted) -> Sufficiency:
     om = extracted.omissions
     if om.chars_after < MIN_CHARS[kind] or extracted.paragraphs < MIN_PARAGRAPHS[kind]:
+        return "insufficient"
+    if om.headings_kept < om.headings_total:
         return "insufficient"
     if om.sections_dropped or om.body_cut_ratio > REFUSE_BODY_CUT:
         return "insufficient"

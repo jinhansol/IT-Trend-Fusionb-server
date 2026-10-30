@@ -172,3 +172,75 @@ def test_code_inside_headings_and_table_cells_is_kept():
         "<table><tr><th>k</th></tr><tr><td><code>x|y</code></td></tr></table>"
     )
     assert extract_html(html, 1000).text == "## Use `TaskGroup`\n\n| k |\n|---|\n| `x\\|y` |"
+
+
+# --- review fixes (PR #1) -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("md", "expected"),
+    [
+        ("Use `Map<String, Integer>` here", "Use `Map<String, Integer>` here"),
+        ("Return `List<User>` or `Optional<Span>`", "Return `List<User>` or `Optional<Span>`"),
+        ("Kotlin `Map<String, List<Int>>`", "Kotlin `Map<String, List<Int>>`"),
+        ("Python `dict[str, list[int]] | None`", "Python `dict[str, list[int]] | None`"),
+        ("Compare `a < b && c > d`", "Compare `a < b && c > d`"),
+        (
+            "A code span with a link ``[x](https://e.com)``",
+            "A code span with a link ``[x](https://e.com)``",
+        ),
+        # Outside code spans: generics and comparisons stay, real HTML tags go.
+        ("List<User> and Map<String, Integer>", "List<User> and Map<String, Integer>"),
+        ("when a < b > c holds", "when a < b > c holds"),
+        ("x<y and y>z", "x<y and y>z"),
+        ("<b>bold</b> <span class='x'>text</span><br/>", "bold text"),
+        ("before <script>alert(1)</script> after", "before after"),
+    ],
+)
+def test_markdown_inline_keeps_technical_syntax(md, expected):
+    assert extract_markdown(md, 1000).text == expected
+
+
+def test_markdown_reference_links_lose_their_targets():
+    md = (
+        "See [문서][api], [the guide][], [api] and [not a link].\n"
+        "Image ![arch][diagram] and <https://example.com/raw>.\n\n"
+        "[api]: https://example.com/docs\n"
+        '  [diagram]: https://img.example.com/a.png "title"\n'
+        "[the guide]: <https://example.com/guide>\n\n"
+        "```text\n[kept]: https://inside.code/block\n```\n"
+    )
+    text = extract_markdown(md, 1000).text
+
+    assert text.startswith("See 문서, the guide, api and [not a link].")
+    assert "Image [이미지: arch] and ." in text
+    assert "example.com" not in text and "img.example" not in text
+    assert "[kept]: https://inside.code/block" in text  # code blocks are left alone
+
+
+@pytest.mark.parametrize("cap", [0, 1, 5, 9, 10, 25, 100, 999, 6000])
+def test_output_never_exceeds_the_cap(cap):
+    headings_only = "\n\n".join(f"## heading number {i} with a long title" for i in range(400))
+    one_long_section = "# Title\n\n" + "word " * 5000
+    many_sections = article("dev_python.md") * 5
+    for md in (headings_only, one_long_section, many_sections):
+        extracted = extract_markdown(md, cap)
+        assert len(extracted.text) <= cap
+    assert len(extract_html(article("dev_spring.html"), cap).text) <= cap
+
+
+def test_omissions_match_what_is_left_after_a_hard_cut():
+    md = "\n\n".join(f"## heading number {i} with a long title" for i in range(400))
+    extracted = extract_markdown(md, 6000)
+    om = extracted.omissions
+    shown = [line for line in extracted.text.split("\n") if line.startswith("## ")]
+
+    assert len(extracted.text) <= 6000 and extracted.text.endswith("\n… (생략)")
+    assert om.headings_total == 400
+    assert om.headings_kept == len(shown) < 400
+    assert sufficiency("dev", extracted) == "insufficient"
+
+
+def test_omissions_with_no_cut_keep_every_heading():
+    extracted = extract_html(article("dev_spring.html"), MAX_INPUT_CHARS["dev"])
+    assert extracted.omissions.headings_kept == extracted.omissions.headings_total == 5
