@@ -84,6 +84,7 @@ TABLES_IN_DELETE_ORDER = (
     "learning_unit_technologies",
     "content_technologies",
     "content_translations",
+    "content_summaries",
     "job_runs",
     "contents",
     "content_sources",

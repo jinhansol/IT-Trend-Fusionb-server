@@ -151,6 +151,11 @@ class Summarizer:
             self.done[key] = copy.deepcopy(outcome)
         return outcome
 
+    def input_hash_of(self, item: SummaryInput) -> str | None:
+        """The hash summarize() would use for this input, or None if the input is invalid."""
+        extracted = self._extract(item)
+        return None if extracted is None else input_hash(item.kind, item.title, extracted.text)
+
     def _extract(self, item: SummaryInput) -> Extracted | None:
         try:
             checked_url(item.url)

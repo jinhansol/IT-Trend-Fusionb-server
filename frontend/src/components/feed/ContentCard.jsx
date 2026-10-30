@@ -1,7 +1,9 @@
 // One collected article / post / question. Links open the original site.
 // News items may carry a Korean AI translation; the original is shown when there is none.
+// A stored AI summary replaces the feed excerpt; without one the card is unchanged.
 import { ExternalLink } from "lucide-react";
 import { relativeTime } from "../../utils/relativeTime";
+import AiSummary from "./AiSummary";
 
 /** metrics: [{ key: "score", label: "반응" }, ...]; a metric the source lacks (null) is hidden. */
 export default function ContentCard({ item, metrics = [], now }) {
@@ -35,7 +37,11 @@ export default function ContentCard({ item, metrics = [], now }) {
           <ExternalLink size={12} className="shrink-0 mt-1.5 text-slate-400" aria-hidden="true" />
         </a>
       </h3>
-      {excerpt && <p className="text-sm text-slate-600 leading-relaxed line-clamp-3 mb-3">{excerpt}</p>}
+      {item.ai_summary ? (
+        <AiSummary summary={item.ai_summary} />
+      ) : (
+        excerpt && <p className="text-sm text-slate-600 leading-relaxed line-clamp-3 mb-3">{excerpt}</p>
+      )}
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
         {item.technologies.slice(0, 4).map((tech) => (
           <span key={tech.slug} className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">

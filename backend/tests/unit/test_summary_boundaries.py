@@ -4,7 +4,8 @@
   fetcher), so no article page can be requested before SSRF/DNS checks exist.
 - The web app and the collector never import the summary code or the LLM interface:
   no model call can happen in a request or during collection. The one job that may
-  call a model is the translation job (app/jobs/translate.py), run on its own.
+  call a model are the translation and summary jobs (app/jobs/translate.py,
+  app/jobs/summarize.py), each run on its own.
 """
 
 import ast
@@ -58,12 +59,17 @@ def test_only_the_summarizer_and_translator_use_the_llm_interface():
         for path in APP.rglob("*.py")
         if any(matches(n, ["app.integrations.llm"]) for n in imports(path))
     }
-    assert users == {"summaries/summarizer.py", "summaries/translate.py", "jobs/translate.py"}
+    assert users == {
+        "summaries/summarizer.py",
+        "summaries/translate.py",
+        "jobs/translate.py",
+        "jobs/summarize.py",
+    }
 
 
 def test_web_app_and_collector_do_not_import_summaries():
-    job = APP / "jobs" / "translate.py"
-    outside = [p for p in APP.rglob("*.py") if SUMMARIES not in p.parents and p != job]
+    jobs = {APP / "jobs" / "translate.py", APP / "jobs" / "summarize.py"}
+    outside = [p for p in APP.rglob("*.py") if SUMMARIES not in p.parents and p not in jobs]
     offenders = {
         str(path.relative_to(APP))
         for path in outside
@@ -72,10 +78,10 @@ def test_web_app_and_collector_do_not_import_summaries():
     assert offenders == set()
 
 
-def test_the_collector_and_the_web_app_never_import_the_translation_job():
+def test_the_collector_and_the_web_app_never_import_the_model_jobs():
     users = {
         str(path.relative_to(APP))
         for path in APP.rglob("*.py")
-        if any(matches(n, ["app.jobs.translate"]) for n in imports(path))
+        if any(matches(n, ["app.jobs.translate", "app.jobs.summarize"]) for n in imports(path))
     }
     assert users == set()

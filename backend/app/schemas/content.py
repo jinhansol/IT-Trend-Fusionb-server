@@ -32,6 +32,15 @@ class TranslationRef(BaseModel):
     excerpt: str | None
 
 
+class AiSummaryRef(BaseModel):
+    """E1 AI summary made from the article body. content follows the News or Dev
+    schema (kind); null fields mean the article did not say."""
+
+    kind: str
+    partial_input: bool
+    content: dict
+
+
 class ContentItem(BaseModel):
     id: int
     title: str
@@ -48,6 +57,7 @@ class ContentItem(BaseModel):
     view_count: int | None
     technologies: list[TechnologyRef]
     translation: TranslationRef | None = None
+    ai_summary: AiSummaryRef | None = None
 
 
 class ContentPage(BaseModel):

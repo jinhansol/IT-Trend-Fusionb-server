@@ -4,6 +4,7 @@ from app.models.career import CareerRole, CareerRoleTechnology, UserCareerCandid
 from app.models.content import (
     Content,
     ContentSource,
+    ContentSummary,
     ContentTechnology,
     ContentTranslation,
     JobRun,
@@ -27,6 +28,7 @@ __all__ = [
     "CareerRoleTechnology",
     "Content",
     "ContentSource",
+    "ContentSummary",
     "ContentTechnology",
     "ContentTranslation",
     "JobRun",

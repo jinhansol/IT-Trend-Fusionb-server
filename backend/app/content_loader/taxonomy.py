@@ -157,6 +157,8 @@ class SourceDef(_Strict):
     status: Literal["active", "paused"] = "active"
     # Korean AI translation of title/excerpt; set only once the source's terms allow it.
     ai_translation: bool = False
+    # AI summary of the article body (E1); set only once the source's terms allow it.
+    ai_summary: bool = False
 
     @field_validator("site_url", "feed_url")
     @classmethod
@@ -173,6 +175,8 @@ class SourceDef(_Strict):
             raise ValueError("rss sources need a feed_url")
         if self.ai_translation and (self.kind != "news" or self.language != "en"):
             raise ValueError("ai_translation is only for English news sources")
+        if self.ai_summary and self.kind not in ("news", "blog"):
+            raise ValueError("ai_summary is only for news and blog sources")
         model = _OPTIONS[self.adapter]
         if model is None:
             if self.options:

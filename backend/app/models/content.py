@@ -36,6 +36,8 @@ SUMMARY_STATUSES = ("pending", "done", "failed", "skipped")
 TAG_METHODS = ("rule", "llm", "manual")
 JOB_STATUSES = ("running", "succeeded", "failed", "skipped")
 TRANSLATION_STATUSES = ("done", "failed")
+AI_SUMMARY_STATUSES = ("done", "failed", "skipped")
+AI_SUMMARY_KINDS = ("news", "dev")
 
 
 class Technology(Base):
@@ -105,6 +107,9 @@ class ContentSource(Base):
     # Korean AI translation of title and excerpt is allowed (English news only, opt-in
     # per source once its terms permit translation). Off by default.
     ai_translation: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
+    # AI summary from the article body (E1) is allowed. Off by default; only for news
+    # and blog sources whose terms allow processing the body with an external model.
+    ai_summary: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     status: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
@@ -174,6 +179,33 @@ class ContentTranslation(Base):
     input_hash: Mapped[str] = mapped_column(CHAR(64))
     prompt_version: Mapped[str] = mapped_column(String(32))
     model: Mapped[str | None] = mapped_column(String(100))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
+
+
+class ContentSummary(Base):
+    """E1 AI summary of one item, made from its article body (never from the feed
+    excerpt). payload follows NewsSummary or DevSummary; contents rows are unchanged."""
+
+    __tablename__ = "content_summaries"
+    __table_args__ = (
+        CheckConstraint(_in_list("status", AI_SUMMARY_STATUSES), name="status_valid"),
+        CheckConstraint(_in_list("kind", AI_SUMMARY_KINDS), name="kind_valid"),
+    )
+
+    content_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("contents.id", ondelete="CASCADE"), primary_key=True
+    )
+    kind: Mapped[str] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(20))
+    payload: Mapped[dict | None] = mapped_column(JSON)
+    partial_input: Mapped[bool] = mapped_column(Boolean, default=False)
+    input_hash: Mapped[str | None] = mapped_column(CHAR(64))
+    prompt_version: Mapped[str] = mapped_column(String(32))
+    model: Mapped[str | None] = mapped_column(String(100))
+    skip_reason: Mapped[str | None] = mapped_column(String(64))
     error_code: Mapped[str | None] = mapped_column(String(64))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
