@@ -161,7 +161,7 @@
 
 | 상황 | 처리 | 근거 |
 | :--- | :--- | :--- |
-| 소스 접속 실패, HTTP 오류 | 그 소스만 `job_runs.status='failed'` + 오류 요약, 다른 소스는 계속. 5xx·네트워크 오류는 1회 재시도 | [실행] `test_a_failing_source_is_recorded_and_does_not_stop_others` · `integrations/http.py` `HttpFetcher` |
+| 소스 접속 실패, HTTP 오류 | 그 소스만 `job_runs.status='failed'` + 오류 요약, 다른 소스는 계속. (F1 정정) 요청은 최대 3회: 5xx·타임아웃·연결 오류는 1초·2초 뒤 재시도, 429는 `Retry-After`(30초 이하)를 따르고 그보다 길면 즉시 실패, 400·401·403·404 등은 재시도 안 함. 건너뛴 항목 수는 `job_runs.failed_count` | [실행] `test_a_failing_source_is_recorded_and_does_not_stop_others` · `tests/unit/test_http_fetcher.py` · `integrations/http.py` `HttpFetcher` |
 | 피드가 아닌 응답 (HTML 등) | `FetchError("not a readable RSS/Atom feed")` → failed | [실행] |
 | 응답 크기 초과 | 5MB 초과 시 failed (`COLLECTOR_MAX_RESPONSE_BYTES`) | [분석] |
 | 오류 메시지 속 비밀값 | 쿼리 문자열을 빼고 기록 (Stack Exchange 키 보호) | [분석] `_where()` |
