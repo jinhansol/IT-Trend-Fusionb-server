@@ -29,8 +29,10 @@ from app.schemas.content import (
     SourceRef,
     SourceStatus,
     TechnologyRef,
+    TranslationRef,
     TrendReport,
 )
+from app.services.translations import shown_translations
 
 TOP_TECHNOLOGIES = 10
 DAILY_TECHNOLOGIES = 5
@@ -84,7 +86,13 @@ def _item(content: Content) -> ContentItem:
 
 
 def _page(
-    db: Session, query: Select, order_by, page: int, size: int, technologies_for=None
+    db: Session,
+    query: Select,
+    order_by,
+    page: int,
+    size: int,
+    technologies_for=None,
+    translated: bool = False,
 ) -> ContentPage:
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     rows = list(
@@ -103,6 +111,11 @@ def _page(
         overrides = technologies_for(rows)
         for item in items:
             item.technologies = overrides.get(item.id, item.technologies)
+    if translated:
+        found = shown_translations(db, rows)
+        for item in items:
+            if (t := found.get(item.id)) is not None:
+                item.translation = TranslationRef(title=t.title, excerpt=t.excerpt)
     return ContentPage(items=items, page=page, size=size, total=total)
 
 
@@ -191,6 +204,7 @@ def list_news(db: Session, page: int, size: int, tech: str | None) -> ContentPag
         page,
         size,
         technologies_for=lambda rows: _news_group_technologies(db, rows),
+        translated=True,
     )
 
 

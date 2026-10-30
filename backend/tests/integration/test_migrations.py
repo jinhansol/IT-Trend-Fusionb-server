@@ -38,6 +38,7 @@ HEAD_TABLES = {
     "content_sources",
     "contents",
     "content_technologies",
+    "content_translations",
     "job_runs",
     "learning_unit_technologies",
 }

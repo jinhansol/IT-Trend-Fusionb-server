@@ -9,6 +9,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Computed,
     ForeignKey,
@@ -17,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.mysql import CHAR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -33,6 +35,7 @@ SOURCE_STATUSES = ("active", "paused", "retired")
 SUMMARY_STATUSES = ("pending", "done", "failed", "skipped")
 TAG_METHODS = ("rule", "llm", "manual")
 JOB_STATUSES = ("running", "succeeded", "failed", "skipped")
+TRANSLATION_STATUSES = ("done", "failed")
 
 
 class Technology(Base):
@@ -99,6 +102,9 @@ class ContentSource(Base):
     channel_name: Mapped[str | None] = mapped_column(String(100))
     # Order in the sources file; channels are shown in the order they first appear.
     position: Mapped[int] = mapped_column(Integer)
+    # Korean AI translation of title and excerpt is allowed (English news only, opt-in
+    # per source once its terms permit translation). Off by default.
+    ai_translation: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     status: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
@@ -148,6 +154,30 @@ class Content(Base):
     technologies: Mapped[list["ContentTechnology"]] = relationship(
         back_populates="content", cascade="all, delete-orphan"
     )
+
+
+class ContentTranslation(Base):
+    """Korean AI translation of one item's title and excerpt. The original row is never
+    changed; input_hash ties the translation to the text it was made from."""
+
+    __tablename__ = "content_translations"
+    __table_args__ = (
+        CheckConstraint(_in_list("status", TRANSLATION_STATUSES), name="status_valid"),
+    )
+
+    content_id: Mapped[int] = mapped_column(
+        BigId, ForeignKey("contents.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str | None] = mapped_column(String(500))
+    excerpt: Mapped[str | None] = mapped_column(Text)
+    input_hash: Mapped[str] = mapped_column(CHAR(64))
+    prompt_version: Mapped[str] = mapped_column(String(32))
+    model: Mapped[str | None] = mapped_column(String(100))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
 
 class ContentTechnology(Base):
