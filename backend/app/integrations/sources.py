@@ -16,15 +16,14 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from urllib.parse import urlsplit
 
 import feedparser
 
 from app.integrations.http import Fetcher, FetchError
+from app.integrations.links import SkipEntry, checked_url
 
 EXCERPT_CHARS = 300
 TITLE_CHARS = 500
-URL_CHARS = 2048  # contents.url; a longer link is skipped, never cut
 _TAG = re.compile(r"<[^>]+>")
 _SPACES = re.compile(r"\s+")
 
@@ -124,28 +123,6 @@ def _json(data: bytes, where: str, shape: type):
 
 
 # --- per-entry checks shared by every adapter ----------------------------------------------
-
-
-class SkipEntry(Exception):
-    """This entry cannot be stored; the reason is counted, the rest of the feed goes on."""
-
-
-def checked_url(value) -> str:
-    """The link as given, if it is an absolute http(s) address that fits the column."""
-    if not isinstance(value, str) or not value.strip():
-        raise SkipEntry("no link")
-    url = value.strip()
-    if len(url) > URL_CHARS:
-        raise SkipEntry("link too long")
-    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in url):
-        raise SkipEntry("invalid link")
-    try:
-        parts = urlsplit(url)
-    except ValueError:
-        raise SkipEntry("invalid link") from None
-    if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
-        raise SkipEntry("link is not http(s)")
-    return url
 
 
 def checked_title(value) -> str:
