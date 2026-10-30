@@ -23,6 +23,15 @@ class SourceRef(BaseModel):
     name: str
 
 
+class TranslationRef(BaseModel):
+    """Korean AI translation of title and excerpt (News only). The originals stay in
+    title/excerpt; the card falls back to them when this is null."""
+
+    language: str = "ko"
+    title: str
+    excerpt: str | None
+
+
 class ContentItem(BaseModel):
     id: int
     title: str
@@ -38,6 +47,7 @@ class ContentItem(BaseModel):
     comment_count: int | None
     view_count: int | None
     technologies: list[TechnologyRef]
+    translation: TranslationRef | None = None
 
 
 class ContentPage(BaseModel):

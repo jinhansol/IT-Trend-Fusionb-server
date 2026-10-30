@@ -3,7 +3,8 @@
 - app.summaries never reaches the network (no HTTP client, sockets or the collector's
   fetcher), so no article page can be requested before SSRF/DNS checks exist.
 - The web app and the collector never import the summary code or the LLM interface:
-  no model call can happen in a request or during collection.
+  no model call can happen in a request or during collection. The one job that may
+  call a model is the translation job (app/jobs/translate.py), run on its own.
 """
 
 import ast
@@ -51,20 +52,30 @@ def test_summary_code_has_no_network_access():
     assert found == set()
 
 
-def test_only_the_summarizer_uses_the_llm_interface():
+def test_only_the_summarizer_and_translator_use_the_llm_interface():
     users = {
         str(path.relative_to(APP))
         for path in APP.rglob("*.py")
         if any(matches(n, ["app.integrations.llm"]) for n in imports(path))
     }
-    assert users == {"summaries/summarizer.py"}
+    assert users == {"summaries/summarizer.py", "summaries/translate.py", "jobs/translate.py"}
 
 
 def test_web_app_and_collector_do_not_import_summaries():
-    outside = [path for path in APP.rglob("*.py") if SUMMARIES not in path.parents]
+    job = APP / "jobs" / "translate.py"
+    outside = [p for p in APP.rglob("*.py") if SUMMARIES not in p.parents and p != job]
     offenders = {
         str(path.relative_to(APP))
         for path in outside
         if any(matches(n, ["app.summaries", "app.integrations.llm"]) for n in imports(path))
     }
     assert offenders == set()
+
+
+def test_the_collector_and_the_web_app_never_import_the_translation_job():
+    users = {
+        str(path.relative_to(APP))
+        for path in APP.rglob("*.py")
+        if any(matches(n, ["app.jobs.translate"]) for n in imports(path))
+    }
+    assert users == set()
