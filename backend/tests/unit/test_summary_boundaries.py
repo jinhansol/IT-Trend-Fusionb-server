@@ -8,6 +8,8 @@
   app/jobs/summarize.py), each run on its own.
 - Gemini (google.genai) is reached only through app/integrations/gemini.py, and only the
   job command line (app/jobs/__main__.py) builds that client or starts those jobs.
+- Article pages are fetched only by app/jobs/article_bodies.py (web.dev, host-locked),
+  which the job command line alone uses.
 """
 
 import ast
@@ -93,7 +95,8 @@ def test_only_the_job_command_line_imports_the_model_jobs():
         for path in APP.rglob("*.py")
         if any(matches(n, ["app.jobs.translate", "app.jobs.summarize"]) for n in imports(path))
     }
-    assert users == {"jobs/__main__.py"}
+    # article_bodies only reads the summary job's attempt limit and body type.
+    assert users == {"jobs/__main__.py", "jobs/article_bodies.py"}
 
 
 def test_only_the_job_command_line_builds_the_gemini_client():
@@ -108,4 +111,13 @@ def test_only_the_job_command_line_builds_the_gemini_client():
         if any(matches(n, ["app.integrations.gemini"]) for n in imports(path))
     }
     assert sdk == {"integrations/gemini.py"}
+    assert users == {"jobs/__main__.py"}
+
+
+def test_only_the_job_command_line_fetches_article_pages():
+    users = {
+        str(path.relative_to(APP))
+        for path in APP.rglob("*.py")
+        if any(matches(n, ["app.jobs.article_bodies"]) for n in imports(path))
+    }
     assert users == {"jobs/__main__.py"}

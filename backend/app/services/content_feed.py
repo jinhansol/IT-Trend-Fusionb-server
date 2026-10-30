@@ -27,6 +27,7 @@ from app.schemas.content import (
     DevChannel,
     DevChannelList,
     FeedStatus,
+    LicenseRef,
     SourceRef,
     SourceStatus,
     TechnologyRef,
@@ -63,6 +64,11 @@ def _visible_sources(scope: str):
     return condition & (ContentSource.kind != "news")
 
 
+_LICENSES = {
+    "CC-BY-4.0": LicenseRef(name="CC BY 4.0", url="https://creativecommons.org/licenses/by/4.0/"),
+}
+
+
 def _item(content: Content) -> ContentItem:
     return ContentItem(
         id=content.id,
@@ -70,7 +76,11 @@ def _item(content: Content) -> ContentItem:
         url=content.url,
         excerpt=content.excerpt,
         author=content.author,
-        source=SourceRef(slug=content.source.slug, name=content.source.name),
+        source=SourceRef(
+            slug=content.source.slug,
+            name=content.source.name,
+            license=_LICENSES.get((content.source.options or {}).get("license")),
+        ),
         published_at=content.published_at,
         collected_at=content.collected_at,
         score=content.score,

@@ -47,7 +47,7 @@ def test_news_lists_only_news_newest_first(client):
 
     assert body["total"] == 3 and body["page"] == 1 and len(body["items"]) == 2
     first = body["items"][0]
-    assert first["source"] == {"slug": "sample-news", "name": "Sample News"}
+    assert first["source"] == {"slug": "sample-news", "name": "Sample News", "license": None}
     assert first["score"] is None and first["comment_count"] is None
     assert Z_TIME.match(first["collected_at"])
     sort_keys = [i["published_at"] or i["collected_at"] for i in body["items"]]

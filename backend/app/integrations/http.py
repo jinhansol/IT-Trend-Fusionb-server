@@ -21,9 +21,16 @@ private address (for example 127.0.0.1.nip.io) is not caught. That is acceptable
 collector, which only starts from feed addresses in the reviewed sources file. Fetching
 article pages from arbitrary links (design E1/F3) must also resolve each host, refuse
 non-public results and connect to the address it checked.
+
+Article pages (app/jobs/article_bodies.py) use a fetcher made with `allowed_hosts`: every
+address, redirects included, must then be https on one of those exact hosts. When the
+fetcher connects directly (no proxy in the environment) the host must also resolve to
+public addresses only; behind a proxy the proxy resolves and connects, so that check
+cannot be made here.
 """
 
 import ipaddress
+import os
 import socket
 import time
 from collections.abc import Callable
@@ -89,6 +96,21 @@ def _ip_literal(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | No
         return None  # a host name
 
 
+def _behind_proxy() -> bool:
+    return any(os.environ.get(k) for k in ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"))
+
+
+def check_resolved(host: str) -> None:
+    """Refuse a host that resolves to any non-public address (or does not resolve)."""
+    try:
+        infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except OSError:
+        raise FetchError(f"host does not resolve: {host}") from None
+    for info in infos:
+        if not ipaddress.ip_address(info[4][0]).is_global:
+            raise FetchError(f"host resolves to a non-public address: {host}")
+
+
 def retry_after_seconds(value: str | None, now: datetime | None = None) -> float | None:
     """Retry-After as seconds to wait, or None when absent or unreadable."""
     if not value:
@@ -111,8 +133,10 @@ class HttpFetcher:
         settings: Settings,
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        allowed_hosts: frozenset[str] | None = None,
     ) -> None:
         self._max_bytes = settings.collector_max_response_bytes
+        self._allowed_hosts = allowed_hosts
         self._sleep = sleep
         self._client = httpx.Client(
             timeout=settings.collector_timeout_seconds,
@@ -140,6 +164,7 @@ class HttpFetcher:
         except httpx.InvalidURL:
             raise FetchError("invalid address") from None
         check_address(target)
+        self._check_allowed(target)
         start = target
         try:
             for _hop in range(MAX_REDIRECTS + 1):
@@ -173,7 +198,20 @@ class HttpFetcher:
             raise FetchError(f"redirect from {_where(response.url)} refused: {exc}") from None
         if response.url.scheme == "https" and target.scheme != "https":
             raise FetchError(f"redirect from {_where(response.url)} to plain http refused")
+        try:
+            self._check_allowed(target)
+        except FetchError as exc:
+            raise FetchError(f"redirect from {_where(response.url)} refused: {exc}") from None
         return target
+
+    def _check_allowed(self, url: httpx.URL) -> None:
+        if self._allowed_hosts is None:
+            return
+        host = url.host.rstrip(".").lower()
+        if url.scheme != "https" or host not in self._allowed_hosts:
+            raise FetchError(f"address outside the allowed hosts refused: {_where(url)}")
+        if not _behind_proxy():
+            check_resolved(host)
 
     def _read(self, response: httpx.Response) -> bytes:
         where = _where(response.url)

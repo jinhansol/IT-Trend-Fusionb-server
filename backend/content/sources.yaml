@@ -77,3 +77,6 @@ sources:
   - { slug: daangn-tech, name: 당근 테크 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://medium.com/daangn", feed_url: "https://medium.com/feed/daangn", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
   - { slug: kakaopay-tech, name: 카카오페이 기술 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://tech.kakaopay.com/", feed_url: "https://tech.kakaopay.com/rss", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
   - { slug: lycorp-tech, name: LY Corporation Tech Blog, kind: blog, adapter: rss, language: ko, site_url: "https://techblog.lycorp.co.jp/ko", feed_url: "https://techblog.lycorp.co.jp/ko/feed/index.xml", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
+
+  # --- Dev: web.dev (pages are CC BY 4.0; the only source whose articles are summarized) ---
+  - { slug: webdev, name: web.dev, kind: blog, adapter: rss, language: en, site_url: "https://web.dev/", feed_url: "https://web.dev/static/blog/feed.xml", channel: webdev, channel_name: web.dev, max_items: 10, ai_summary: true, options: { license: CC-BY-4.0 } }

@@ -73,6 +73,27 @@ describe("AI summary on cards", () => {
     expect(within(box).queryByText("활용 상황")).toBeNull();
   });
 
+  it("credits a licensed source and says the summary changes the original", () => {
+    const license = { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" };
+    render(
+      <ContentCard
+        item={{ ...BASE, author: "Barry Pollard", source: { slug: "webdev", name: "web.dev", license }, ai_summary: DEV }}
+      />
+    );
+    const box = screen.getByRole("region", { name: "AI 요약" });
+    const link = within(box).getByRole("link", { name: "CC BY 4.0" });
+    expect(link.getAttribute("href")).toBe(license.url);
+    expect(within(box).getByText(/AI가 원문을 요약·재구성한 것으로 원문과 다릅니다/)).toBeTruthy();
+    expect(screen.getByText("web.dev")).toBeTruthy();
+    expect(screen.getByText(/Barry Pollard/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Sample article/ }).getAttribute("href")).toBe(BASE.url);
+  });
+
+  it("shows no license line for sources without one", () => {
+    render(<ContentCard item={{ ...BASE, ai_summary: DEV }} />);
+    expect(screen.queryByText(/원문 라이선스/)).toBeNull();
+  });
+
   it("keeps the plain card when there is no summary", () => {
     render(<ContentCard item={{ ...BASE, ai_summary: null }} />);
     expect(screen.queryByRole("region", { name: "AI 요약" })).toBeNull();
