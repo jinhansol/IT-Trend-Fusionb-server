@@ -18,6 +18,7 @@ from app.core.errors import AppError
 from app.db.types import utc_now
 from app.models.content import Content, ContentSource, ContentTechnology, JobRun, Technology
 from app.schemas.content import (
+    AiSummaryRef,
     ChannelSource,
     ContentItem,
     ContentPage,
@@ -32,6 +33,7 @@ from app.schemas.content import (
     TranslationRef,
     TrendReport,
 )
+from app.services.summaries import shown_summaries
 from app.services.translations import shown_translations
 
 TOP_TECHNOLOGIES = 10
@@ -93,6 +95,7 @@ def _page(
     size: int,
     technologies_for=None,
     translated: bool = False,
+    summary_kind: str | None = None,
 ) -> ContentPage:
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     rows = list(
@@ -116,6 +119,13 @@ def _page(
         for item in items:
             if (t := found.get(item.id)) is not None:
                 item.translation = TranslationRef(title=t.title, excerpt=t.excerpt)
+    if summary_kind is not None:
+        summaries = shown_summaries(db, rows, summary_kind)
+        for item in items:
+            if (s := summaries.get(item.id)) is not None:
+                item.ai_summary = AiSummaryRef(
+                    kind=s.kind, partial_input=s.partial_input, content=s.payload
+                )
     return ContentPage(items=items, page=page, size=size, total=total)
 
 
@@ -205,6 +215,7 @@ def list_news(db: Session, page: int, size: int, tech: str | None) -> ContentPag
         size,
         technologies_for=lambda rows: _news_group_technologies(db, rows),
         translated=True,
+        summary_kind="news",
     )
 
 
@@ -245,7 +256,7 @@ def list_channel_posts(
         order = (Content.score.desc(), Content.sort_at.desc(), Content.id.desc())
     else:
         order = (Content.sort_at.desc(), Content.id.desc())
-    return _page(db, query, order, page, size)
+    return _page(db, query, order, page, size, summary_kind="dev")
 
 
 def trends(db: Session, scope: str, days: int) -> TrendReport:
