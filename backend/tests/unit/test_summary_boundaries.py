@@ -6,6 +6,8 @@
   no model call can happen in a request or during collection. The one job that may
   call a model are the translation and summary jobs (app/jobs/translate.py,
   app/jobs/summarize.py), each run on its own.
+- Gemini (google.genai) is reached only through app/integrations/gemini.py, and only the
+  job command line (app/jobs/__main__.py) builds that client or starts those jobs.
 """
 
 import ast
@@ -43,6 +45,7 @@ def test_summary_code_has_no_network_access():
         "app.jobs",
         "openai",
         "anthropic",
+        "google",
     )
     found = {
         f"{path.name}: {name}"
@@ -64,11 +67,17 @@ def test_only_the_summarizer_and_translator_use_the_llm_interface():
         "summaries/translate.py",
         "jobs/translate.py",
         "jobs/summarize.py",
+        "integrations/gemini.py",
     }
 
 
 def test_web_app_and_collector_do_not_import_summaries():
-    jobs = {APP / "jobs" / "translate.py", APP / "jobs" / "summarize.py"}
+    jobs = {
+        APP / "jobs" / "translate.py",
+        APP / "jobs" / "summarize.py",
+        APP / "jobs" / "__main__.py",
+        APP / "integrations" / "gemini.py",
+    }
     outside = [p for p in APP.rglob("*.py") if SUMMARIES not in p.parents and p not in jobs]
     offenders = {
         str(path.relative_to(APP))
@@ -78,10 +87,25 @@ def test_web_app_and_collector_do_not_import_summaries():
     assert offenders == set()
 
 
-def test_the_collector_and_the_web_app_never_import_the_model_jobs():
+def test_only_the_job_command_line_imports_the_model_jobs():
     users = {
         str(path.relative_to(APP))
         for path in APP.rglob("*.py")
         if any(matches(n, ["app.jobs.translate", "app.jobs.summarize"]) for n in imports(path))
     }
-    assert users == set()
+    assert users == {"jobs/__main__.py"}
+
+
+def test_only_the_job_command_line_builds_the_gemini_client():
+    sdk = {
+        str(path.relative_to(APP))
+        for path in APP.rglob("*.py")
+        if any(matches(n, ["google"]) for n in imports(path))
+    }
+    users = {
+        str(path.relative_to(APP))
+        for path in APP.rglob("*.py")
+        if any(matches(n, ["app.integrations.gemini"]) for n in imports(path))
+    }
+    assert sdk == {"integrations/gemini.py"}
+    assert users == {"jobs/__main__.py"}

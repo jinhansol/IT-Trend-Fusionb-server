@@ -1,7 +1,7 @@
-"""The LLM client interface the summary job talks to. No provider is wired up yet.
+"""The LLM client interface the summary and translation jobs talk to.
 
-A real client (later, after approval) turns provider errors into LLMError kinds so
-the summarizer can decide what to retry. Tests use a scripted fake client.
+The real client (app/integrations/gemini.py) turns provider errors into LLMError kinds
+so the jobs can decide what to retry. Tests use a scripted fake client.
 """
 
 from dataclasses import dataclass
