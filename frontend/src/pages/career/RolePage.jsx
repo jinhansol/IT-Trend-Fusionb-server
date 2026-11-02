@@ -19,7 +19,7 @@ function TechnologyItem({ tech }) {
     <li className="rounded-xl border border-slate-100 bg-white p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="font-bold">{tech.name}</span>
-        <Link to={`/${query}`} className="text-sm text-indigo-600 hover:underline">
+        <Link to={`/news${query}`} className="text-sm text-indigo-600 hover:underline">
           IT 뉴스
         </Link>
         <Link to={`/dev${query}`} className="text-sm text-indigo-600 hover:underline">

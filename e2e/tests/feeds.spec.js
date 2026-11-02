@@ -2,8 +2,34 @@
 // Content comes from backend/tests/e2e_seed.py (stored sample responses).
 import { expect, test } from "@playwright/test";
 
-test("Home shows collected news, trends and the last update", async ({ page }) => {
+test("Home shows the latest three news and Dev articles and leads to News, Dev and Career", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: "오늘의 IT 탐색" })).toBeVisible();
+  const news = page.getByRole("region", { name: "최신 IT 뉴스" });
+  const dev = page.getByRole("region", { name: "최신 개발 아티클" });
+  await expect(news.locator("article")).toHaveCount(3);
+  await expect(dev.locator("article")).toHaveCount(3);
+  await expect(news.getByRole("link", { name: /파이썬 3\.14 출시/ })).toHaveAttribute("href", "https://news.example.com/articles/1");
+  await expect(dev.getByText("Stack Overflow")).toHaveCount(0); // articles only, no Q&A
+  await expect(page.getByRole("region", { name: "학습·진로 탐색" }).getByRole("link", { name: /진로 탐색/ })).toHaveAttribute(
+    "href",
+    "/career/explore"
+  );
+
+  await dev.getByRole("link", { name: "Dev 전체 보기" }).click();
+  await expect(page).toHaveURL(/\/dev$/);
+  await page.goBack();
+  await news.getByRole("link", { name: "전체 뉴스 보기" }).click();
+  await expect(page).toHaveURL(/\/news$/);
+  await expect(page.getByRole("heading", { name: "IT 뉴스" })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("region", { name: "학습·진로 탐색" }).getByRole("link", { name: /Career 학습 시작하기/ }).click();
+  await expect(page).toHaveURL(/\/career$/);
+});
+
+test("News (opened directly) keeps the filter, trends and the last update, and survives a reload", async ({ page }) => {
+  await page.goto("/news");
   await expect(page.getByRole("heading", { name: "IT 뉴스" })).toBeVisible();
   const article = page.getByRole("link", { name: /파이썬 3\.14 출시/ });
   await expect(article).toHaveAttribute("href", "https://news.example.com/articles/1");
@@ -15,6 +41,10 @@ test("Home shows collected news, trends and the last update", async ({ page }) =
 
   await expect(page.getByRole("heading", { name: "분야별 언급 기사 수" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "일별 기술 언급 기사 수" })).toBeVisible();
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/news\?tech=security$/);
+  await expect(page.getByRole("link", { name: /랜섬웨어/ })).toBeVisible();
 });
 
 test("Dev switches sources and sorts by weekly popularity", async ({ page }) => {

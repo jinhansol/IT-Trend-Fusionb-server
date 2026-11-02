@@ -111,7 +111,7 @@ describe("career learning pages", () => {
     expect(screen.getByRole("link", { name: /반복문/ }).getAttribute("href")).toBe("/career/python/loops");
   });
 
-  it("links the unit's technologies to the filtered Home news and Dev posts", async () => {
+  it("links the unit's technologies to the filtered News and Dev posts", async () => {
     restore = installFakeServer({
       "GET /tracks/python/units/variables": () => [
         200,
@@ -122,7 +122,7 @@ describe("career learning pages", () => {
 
     const section = await screen.findByRole("region", { name: "관련 기술" });
     expect(section.textContent).toContain("Python");
-    expect(screen.getByRole("link", { name: "IT 뉴스" }).getAttribute("href")).toBe("/?tech=python");
+    expect(screen.getByRole("link", { name: "IT 뉴스" }).getAttribute("href")).toBe("/news?tech=python");
     expect(screen.getByRole("link", { name: "Dev 글" }).getAttribute("href")).toBe("/dev?tech=python");
   });
 

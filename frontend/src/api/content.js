@@ -22,6 +22,12 @@ export async function fetchChannelPosts(channel, { sort = "latest", days = 7, pa
   return data; // { items, page, size, total }
 }
 
+/** Newest articles over every Dev blog source (Home). */
+export async function fetchDevArticles({ page = 1, size = 12 } = {}) {
+  const { data } = await apiClient.get("/dev/articles", { params: { page, size } });
+  return data; // { items, page, size, total }
+}
+
 export async function fetchTrends(scope, days = 7) {
   const { data } = await apiClient.get("/trends", { params: { scope, days } });
   return data; // { scope, days, total, fields, technologies, daily, daily_technologies }

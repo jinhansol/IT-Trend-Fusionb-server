@@ -116,7 +116,7 @@ function ProgressHeader({ progress }) {
   );
 }
 
-/** Links from the unit's technologies to the matching Home news and Dev posts. */
+/** Links from the unit's technologies to the matching News and Dev posts. */
 function UnitTechnologies({ technologies }) {
   if (!technologies?.length) return null;
   const query = (slug) => `?tech=${encodeURIComponent(slug)}`;
@@ -125,7 +125,7 @@ function UnitTechnologies({ technologies }) {
       {technologies.map((tech) => (
         <span key={tech.slug} className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-100">
           <span className="font-semibold text-slate-700">{tech.name}</span>
-          <Link to={`/${query(tech.slug)}`} className="text-indigo-600 hover:underline">
+          <Link to={`/news${query(tech.slug)}`} className="text-indigo-600 hover:underline">
             IT 뉴스
           </Link>
           <Link to={`/dev${query(tech.slug)}`} className="text-indigo-600 hover:underline">

@@ -269,6 +269,19 @@ def list_channel_posts(
     return _page(db, query, order, page, size, summary_kind="dev")
 
 
+def list_dev_articles(db: Session, page: int, size: int) -> ContentPage:
+    """Newest articles over every visible Dev blog source (Home). Community and Q&A sources
+    stay on their Dev channels. Same order, summaries and licenses as the channel lists."""
+    query = (
+        select(Content)
+        .join(ContentSource, ContentSource.id == Content.source_id)
+        .where(_visible_sources("dev"), ContentSource.kind == "blog")
+    )
+    return _page(
+        db, query, (Content.sort_at.desc(), Content.id.desc()), page, size, summary_kind="dev"
+    )
+
+
 def trends(db: Session, scope: str, days: int) -> TrendReport:
     if scope == "news":
         return _news_trends(db, days)

@@ -98,6 +98,39 @@ def test_channel_posts_latest_and_popular(client, clean_db):
     }
 
 
+def test_dev_articles_are_the_newest_blog_posts_over_every_channel(client, clean_db):
+    body = client.get("/api/dev/articles", params={"size": 50}).json()
+    items = body["items"]
+    # Blog sources only (DEV Community + the Korean tech blog); community, Q&A and news
+    # stay out.
+    assert {i["source"]["slug"] for i in items} == {"devto", "sample-blog"}
+    assert body["total"] == 4
+    times = [i["published_at"] or i["collected_at"] for i in items]
+    assert times == sorted(times, reverse=True)
+
+    with clean_db.connect() as connection:
+        expected = (
+            connection.execute(
+                text(
+                    "SELECT c.url FROM contents c JOIN content_sources s ON s.id = c.source_id "
+                    "WHERE s.kind = 'blog' ORDER BY c.sort_at DESC, c.id DESC LIMIT 3"
+                )
+            )
+            .scalars()
+            .all()
+        )
+    top = client.get("/api/dev/articles", params={"size": 3}).json()
+    assert [i["url"] for i in top["items"]] == expected
+    assert top["total"] == 4 and all(i["ai_summary"] is None for i in top["items"])
+
+    # A retired source drops out, as in the channel lists.
+    with clean_db.begin() as connection:
+        connection.execute(
+            text("UPDATE content_sources SET status = 'retired' WHERE slug = 'devto'")
+        )
+    assert client.get("/api/dev/articles").json()["total"] == 1
+
+
 def test_channel_errors(client):
     feed_only = client.get("/api/dev/channels/kr-techblog/posts", params={"sort": "popular"})
     assert feed_only.status_code == 422
@@ -164,6 +197,7 @@ def test_read_endpoints_never_write(app_client, clean_db):
             "/api/news",
             "/api/dev/channels",
             "/api/dev/channels/devto/posts?sort=popular",
+            "/api/dev/articles",
             "/api/trends?scope=dev",
             "/api/feed-status?scope=news",
         ):
