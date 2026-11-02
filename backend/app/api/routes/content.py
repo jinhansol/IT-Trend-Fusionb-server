@@ -43,6 +43,13 @@ def list_channel_posts(
     return content_feed.list_channel_posts(db, channel, sort, days, page, size, tech)
 
 
+@router.get("/dev/articles", response_model=ContentPage)
+def list_dev_articles(
+    page: int = Page, size: int = Size, db: Session = Depends(get_db)
+) -> ContentPage:
+    return content_feed.list_dev_articles(db, page, size)
+
+
 @router.get("/trends", response_model=TrendReport)
 def trends(scope: Scope = "news", days: int = Days, db: Session = Depends(get_db)) -> TrendReport:
     return content_feed.trends(db, scope, days)

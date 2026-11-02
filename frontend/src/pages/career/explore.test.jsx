@@ -91,7 +91,7 @@ describe("career exploration", () => {
     expect(within(core).getByRole("link", { name: "Python 기초 · 1. 변수" }).getAttribute("href")).toBe(
       "/career/python/variables"
     );
-    expect(within(core).getByRole("link", { name: "IT 뉴스" }).getAttribute("href")).toBe("/?tech=python");
+    expect(within(core).getByRole("link", { name: "IT 뉴스" }).getAttribute("href")).toBe("/news?tech=python");
     expect(within(core).getByRole("link", { name: "Dev 글" }).getAttribute("href")).toBe("/dev?tech=python");
     const related = screen.getByRole("region", { name: "함께 쓰는 기술" });
     expect(within(related).getByText("아직 이 기술을 다루는 Career 학습이 없습니다.")).toBeTruthy();

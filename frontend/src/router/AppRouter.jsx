@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import HomePage from "../pages/home/HomePage";
+import NewsPage from "../pages/news/NewsPage";
 import DevPage from "../pages/dev/DevPage";
 import HeaderNav from "../components/common/HeaderNav";
 import CareerHomePage from "../pages/career/CareerHomePage";
@@ -16,8 +17,10 @@ export default function AppRouter() {
     <BrowserRouter>
       <HeaderNav />
       <Routes>
-        {/* DevHub 2.0 Home and Dev. The v1 Home/DevDashboard (legacy backend) are no longer routed. */}
+        {/* DevHub 2.0 Home (latest news and Dev articles), News and Dev. The v1
+            Home/DevDashboard (legacy backend) are no longer routed. */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/news" element={<NewsPage />} />
         <Route path="/dev" element={<DevPage />} />
         {/* DevHub 2.0 Career hub. The v1 CareerDashboard (legacy backend) is no longer routed. */}
         <Route path="/career" element={<CareerHomePage />} />

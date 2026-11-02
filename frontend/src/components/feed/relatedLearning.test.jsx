@@ -3,7 +3,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import { installFakeServer } from "../../test/fakeServer";
 import DevPage from "../../pages/dev/DevPage";
-import HomePage from "../../pages/home/HomePage";
+import NewsPage from "../../pages/news/NewsPage";
 
 // jsdom has no ResizeObserver; recharts' ResponsiveContainer needs one.
 globalThis.ResizeObserver ??= class {
@@ -79,7 +79,7 @@ describe("technology filter in the URL and related learning", () => {
   it("shows no related learning without a selected technology", async () => {
     const unitRequests = [];
     restore = homeServer({ unitRequests });
-    renderAt("/", <HomePage />);
+    renderAt("/news", <NewsPage />);
     await screen.findByRole("button", { name: "Python" });
     expect(screen.queryByRole("region", { name: "관련 학습" })).toBeNull();
     expect(unitRequests).toEqual([]);
@@ -88,7 +88,7 @@ describe("technology filter in the URL and related learning", () => {
   it("reads ?tech= from the URL, filters the news and links the units of that technology", async () => {
     const newsRequests = [];
     restore = homeServer({ newsRequests });
-    renderAt("/?tech=python", <HomePage />);
+    renderAt("/news?tech=python", <NewsPage />);
 
     const card = await screen.findByRole("region", { name: "관련 학습" });
     expect(card.textContent).toContain("Python을(를) 다루는 Career 학습");
@@ -100,21 +100,21 @@ describe("technology filter in the URL and related learning", () => {
 
   it("writes the chosen filter to the URL and clears it again", async () => {
     restore = homeServer();
-    renderAt("/", <HomePage />);
+    renderAt("/news", <NewsPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Python" }));
-    expect(screen.getByTestId("location").textContent).toBe("/?tech=python");
+    expect(screen.getByTestId("location").textContent).toBe("/news?tech=python");
     expect(await screen.findByRole("region", { name: "관련 학습" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "전체" }));
-    expect(screen.getByTestId("location").textContent).toBe("/");
+    expect(screen.getByTestId("location").textContent).toBe("/news");
     await waitFor(() => expect(screen.queryByRole("region", { name: "관련 학습" })).toBeNull());
   });
 
   it("keeps a linked technology outside the top list selectable, and hides the card when it has no units", async () => {
     const unitRequests = [];
     restore = homeServer({ unitRequests });
-    renderAt("/?tech=rust", <HomePage />);
+    renderAt("/news?tech=rust", <NewsPage />);
 
     const chip = await screen.findByRole("button", { name: "rust" });
     expect(chip.getAttribute("aria-pressed")).toBe("true");
@@ -122,12 +122,12 @@ describe("technology filter in the URL and related learning", () => {
     expect(screen.queryByRole("region", { name: "관련 학습" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "전체" }));
-    expect(screen.getByTestId("location").textContent).toBe("/");
+    expect(screen.getByTestId("location").textContent).toBe("/news");
   });
 
   it("hides the card when the technology is unknown (404)", async () => {
     restore = homeServer();
-    renderAt("/?tech=unknown-tech", <HomePage />);
+    renderAt("/news?tech=unknown-tech", <NewsPage />);
     await screen.findByRole("button", { name: "unknown-tech" });
     expect(await screen.findByText("이 기술에 관한 기사가 아직 없습니다.")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "관련 학습" })).toBeNull();
@@ -137,7 +137,7 @@ describe("technology filter in the URL and related learning", () => {
     const newsRequests = [];
     const unitRequests = [];
     restore = homeServer({ newsRequests, unitRequests });
-    renderAt("/?tech=..%2Fadmin", <HomePage />);
+    renderAt("/news?tech=..%2Fadmin", <NewsPage />);
     await screen.findByText("아직 수집된 기사가 없습니다.");
     expect(newsRequests.at(-1)).toEqual({ page: 1, size: 12 });
     expect(unitRequests).toEqual([]);

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { installFakeServer } from "../test/fakeServer";
 import { relativeTime } from "../utils/relativeTime";
 import DevPage from "./dev/DevPage";
-import HomePage from "./home/HomePage";
+import NewsPage from "./news/NewsPage";
 
 // jsdom has no ResizeObserver; recharts' ResponsiveContainer needs one.
 globalThis.ResizeObserver ??= class {
@@ -62,7 +62,7 @@ describe("relativeTime", () => {
   ])("%s -> %s", (iso, text) => expect(relativeTime(iso, now)).toBe(text));
 });
 
-describe("Home", () => {
+describe("News", () => {
   it("lists news without metrics, filters by technology and loads more", async () => {
     const requests = [];
     restore = installFakeServer({
@@ -75,7 +75,7 @@ describe("Home", () => {
         return [200, { items: page === 1 ? [item(1), item(2)] : [item(3)], page, size: 12, total: 3 }];
       },
     });
-    renderPage(<HomePage />);
+    renderPage(<NewsPage />);
 
     const link = await screen.findByRole("link", { name: /글 1/ });
     expect(link.getAttribute("href")).toBe("https://example.com/1");
@@ -101,7 +101,7 @@ describe("Home", () => {
       "GET /feed-status": () => [200, { ...STATUS, last_updated_at: null, stale: true }],
       "GET /news": () => [200, { items: [], page: 1, size: 12, total: 0 }],
     });
-    renderPage(<HomePage />);
+    renderPage(<NewsPage />);
     expect(await screen.findByText("아직 수집된 기사가 없습니다.")).toBeTruthy();
     expect(await screen.findByText(/아직 수집된 기록이 없습니다/)).toBeTruthy();
     expect(screen.getAllByText("이 기간에 집계할 데이터가 없습니다.").length).toBeGreaterThan(0);

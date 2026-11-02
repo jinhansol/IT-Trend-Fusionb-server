@@ -163,3 +163,13 @@ def test_other_sources_are_never_fetched(run, engine, integration_settings):
         devto = client.get("/api/dev/channels/devto/posts").json()["items"]
         news = client.get("/api/news").json()["items"]
     assert all(i["ai_summary"] is None and i["source"]["license"] is None for i in devto + news)
+
+
+def test_home_dev_articles_carry_the_summary_and_license(run, integration_settings):
+    run(Site(PAGES), "--max-calls", "1")
+    with TestClient(create_app(integration_settings)) as client:
+        items = client.get("/api/dev/articles", params={"size": 50}).json()["items"]
+    summarized = [i for i in items if i["ai_summary"]]
+    assert len(summarized) == 1 and summarized[0]["url"].startswith("https://web.dev/blog/")
+    assert summarized[0]["source"]["license"] == {"name": "CC BY 4.0", "url": LICENSE_URL}
+    assert any(i["ai_summary"] is None for i in items)  # the others keep the plain card
