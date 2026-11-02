@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { fetchChannelPosts, fetchDevChannels, fetchTrends } from "../../api/content";
+import { fetchChannelPosts, fetchDevChannels, fetchDevFeatured, fetchTrends } from "../../api/content";
 import { useApiResource } from "../../hooks/useApiResource";
 import { usePagedList } from "../../hooks/usePagedList";
+import ContentCard from "../../components/feed/ContentCard";
 import FeedList from "../../components/feed/FeedList";
 import FeedUpdated from "../../components/feed/FeedUpdated";
 import RelatedLearning from "../../components/feed/RelatedLearning";
@@ -77,7 +78,8 @@ function ChannelFeed({ channel, tech }) {
   const [sort, setSort] = useState("latest");
   const effectiveSort = channel.has_metrics ? sort : "latest";
   const list = usePagedList(
-    (page) => fetchChannelPosts(channel.slug, { sort: effectiveSort, days: 7, page, size: 12, tech }),
+    (page) =>
+      fetchChannelPosts(channel.slug, { sort: effectiveSort, days: 7, page, size: 12, tech, excludeFeatured: true }),
     [channel.slug, effectiveSort, tech]
   );
   return (
@@ -87,6 +89,7 @@ function ChannelFeed({ channel, tech }) {
         <SortToggle channel={channel} value={effectiveSort} onChange={setSort} />
       </div>
       <FeedList
+        linkOnly
         list={list}
         metrics={METRICS[channel.kind] ?? []}
         emptyText={effectiveSort === "popular" ? "최근 7일 동안 올라온 글이 없습니다." : "아직 수집된 글이 없습니다."}
@@ -95,7 +98,30 @@ function ChannelFeed({ channel, tech }) {
   );
 }
 
-// DevHub 2.0 Dev: developer posts and questions from official APIs and feeds.
+/** Up to two articles with a stored AI summary on top; hidden when there are none. The
+ * board below leaves them out (exclude_featured), so nothing is listed twice. */
+function FeaturedArticles() {
+  const featured = useApiResource(fetchDevFeatured, []);
+  const items = featured.status === "ready" ? featured.data.items : [];
+  if (items.length === 0) return null;
+  const now = new Date();
+  return (
+    <section aria-labelledby="dev-featured" className="mb-10">
+      <h2 id="dev-featured" className="text-2xl font-bold mb-1">AI 요약 아티클</h2>
+      <p className="text-sm text-slate-500 mb-4">이용 조건을 확인한 출처의 글을 AI가 요약했습니다. 원문 링크를 함께 확인하세요.</p>
+      <ul className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {items.map((item) => (
+          <li key={item.id}>
+            <ContentCard item={item} now={now} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// DevHub 2.0 Dev: AI-summarized articles on top, then a board of the latest posts and
+// questions (title, source, date and link) from official APIs and feeds.
 export default function DevPage() {
   const channels = useApiResource(fetchDevChannels, []);
   const trends = useApiResource(() => fetchTrends("dev", 7), []);
@@ -122,6 +148,7 @@ export default function DevPage() {
         </div>
       )}
       <RelatedLearning tech={tech} />
+      <FeaturedArticles />
 
       {channels.status === "loading" && <p className="text-slate-400 py-10 text-center">불러오는 중...</p>}
       {channels.status === "error" && (
