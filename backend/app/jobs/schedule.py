@@ -1,0 +1,144 @@
+"""Scheduled collection: which sources each group collects, and when.
+
+content/collect-schedule.yaml lists, per group (news, dev), the hours to run and the
+sources allowed on schedule. `collect --group` runs exactly that list through the normal
+collector (per-source lock, one failure does not stop the others); `crontab` prints the
+cron lines for it.
+
+Cron is the scheduler: it does not catch up runs missed while the machine was off, and
+`flock -n` skips a run while the previous run of the same group is still going. The
+hours are written in the configured zone and converted to the server's zone (cron uses
+the server's local time), which is exact only for zones without daylight saving time;
+both zones are checked.
+
+The crontab text sits between BEGIN/END marker lines, so installing it again replaces the
+old block instead of adding a second one:
+
+    ( crontab -l 2>/dev/null | sed '/^# BEGIN devhub-collect$/,/^# END devhub-collect$/d'
+      uv run python -m app.jobs crontab --server-tz ... --log-dir ... ) | crontab -
+"""
+
+import shlex
+from datetime import datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.models.content import ContentSource
+
+SCHEDULE_FILE = Path(__file__).resolve().parents[2] / "content" / "collect-schedule.yaml"
+GROUPS = ("news", "dev")
+BEGIN = "# BEGIN devhub-collect"
+END = "# END devhub-collect"
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class Group(_Strict):
+    minute: int = Field(ge=0, le=59)
+    hours: list[int] = Field(min_length=1)
+    sources: list[str] = Field(default_factory=list)
+
+    @field_validator("hours")
+    @classmethod
+    def _hours(cls, hours: list[int]) -> list[int]:
+        if any(h < 0 or h > 23 for h in hours) or len(set(hours)) != len(hours):
+            raise ValueError("hours must be distinct values from 0 to 23")
+        return sorted(hours)
+
+
+class Schedule(_Strict):
+    timezone: str
+    groups: dict[str, Group]
+
+    @field_validator("timezone")
+    @classmethod
+    def _fixed_offset(cls, name: str) -> str:
+        fixed_offset(name)
+        return name
+
+    @field_validator("groups")
+    @classmethod
+    def _groups(cls, groups: dict[str, Group]) -> dict[str, Group]:
+        if set(groups) != set(GROUPS):
+            raise ValueError(f"groups must be exactly {', '.join(GROUPS)}")
+        return groups
+
+    def hours_in(self, group: str, zone: str) -> list[int]:
+        """The group's hours as clock hours in another fixed-offset zone."""
+        shift = fixed_offset(zone) - fixed_offset(self.timezone)
+        hours = self.groups[group].hours
+        return sorted({int((h * 3600 + shift.total_seconds()) // 3600) % 24 for h in hours})
+
+
+def fixed_offset(name: str) -> timedelta:
+    """The UTC offset of a zone without daylight saving time (whole hours)."""
+    try:
+        zone = ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError(f"unknown time zone: {name}") from None
+    offsets = {datetime(2026, month, 1, tzinfo=zone).utcoffset() for month in (1, 7)}
+    offset = offsets.pop()
+    if offsets:
+        raise ValueError(f"{name} has daylight saving time; use a fixed-offset zone")
+    if offset.total_seconds() % 3600:
+        raise ValueError(f"{name} is not a whole-hour offset")
+    return offset
+
+
+def load_schedule(path: Path = SCHEDULE_FILE) -> Schedule:
+    return Schedule.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+
+
+def check_sources(group: str, sources: list[ContentSource]) -> tuple[list, list[str]]:
+    """Split the listed sources into those to run and reasons for the rest.
+
+    A news group runs only news sources, a dev group only the others, and only active ones.
+    """
+    run, skipped = [], []
+    for source in sources:
+        if (source.kind == "news") != (group == "news"):
+            skipped.append(f"{source.slug}: a {source.kind} source is not in the {group} group")
+        elif source.status != "active":
+            skipped.append(f"{source.slug}: {source.status}")
+        else:
+            run.append(source)
+    return run, skipped
+
+
+def crontab(
+    schedule: Schedule, backend_dir: Path, uv: str, log_dir: Path, server_tz: str = "UTC"
+) -> str:
+    fixed_offset(server_tz)  # cron reads the hours in the server's local time
+    for name, value in (("backend dir", backend_dir), ("uv", uv), ("log dir", log_dir)):
+        # cron starts in $HOME with a short PATH, and treats % in a command as a newline.
+        text = str(value)
+        if not text.startswith("/"):
+            raise ValueError(f"{name} must be an absolute path: {text}")
+        if "%" in text or "\n" in text:
+            raise ValueError(f"{name} must not contain % or a newline: {text!r}")
+    q = shlex.quote
+    lines = [
+        BEGIN,
+        "# DevHub 2.0 scheduled collection (generated by: python -m app.jobs crontab).",
+        f"# Hours are {schedule.timezone} converted to the server's zone, {server_tz}.",
+        "# Re-render if the server's time zone changes (check with: timedatectl).",
+    ]
+    for group in GROUPS:
+        g = schedule.groups[group]
+        local = ",".join(f"{h:02d}:{g.minute:02d}" for h in g.hours)
+        lock = f"/tmp/devhub-collect-{group}.lock"
+        log = q(f"{log_dir}/collect-{group}.log")
+        command = (
+            f"cd {q(str(backend_dir))} && flock -n {lock} {q(uv)} run python -m app.jobs collect "
+            f"--group {group} >> {log} 2>&1"
+        )
+        hours = ",".join(str(h) for h in schedule.hours_in(group, server_tz))
+        lines.append(f"# {group}: {local} {schedule.timezone}")
+        lines.append(f"{g.minute} {hours} * * * {command}")
+    lines.append(END)
+    return "\n".join(lines) + "\n"

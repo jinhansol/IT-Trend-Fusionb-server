@@ -1,0 +1,20 @@
+# Scheduled collection (python -m app.jobs collect --group news|dev).
+# Trial values, not tuned: change hours here, then re-render the crontab with
+#   uv run python -m app.jobs crontab
+# Only the sources listed are collected on schedule; anything else is collected by hand.
+# A source is listed only once its terms allow collecting and showing it again
+# (docs/devhub-2.0/DevHub-2.0-E0-Source-Terms-Review.md). AI translation and summaries
+# never run on schedule.
+timezone: Asia/Seoul
+groups:
+  news:
+    minute: 0
+    hours: [2, 14]
+    # techcrunch: left out until the open RSS terms questions (excerpt cut, non-commercial
+    # use) are decided. Other news sources: terms not reviewed yet.
+    sources: []
+  dev:
+    minute: 0
+    hours: [5, 11, 17, 23]
+    # webdev: CC BY 4.0, checked; feed reachable.
+    sources: [webdev]
