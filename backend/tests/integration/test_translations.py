@@ -116,12 +116,18 @@ def rows(engine, sql):
         return [tuple(r) for r in connection.execute(text(sql))]
 
 
-def test_only_english_news_may_turn_translation_on():
-    for override in ({"language": "ko"}, {"kind": "blog", "channel": "c", "channel_name": "C"}):
+def test_only_english_news_and_blogs_may_turn_translation_on():
+    for override in (
+        {"language": "ko"},
+        {"kind": "community", "channel": "c", "channel_name": "C"},
+    ):
         data = sources()
         data["sources"][-2] |= override
-        with pytest.raises(ValidationError, match="ai_translation is only for English news"):
+        with pytest.raises(ValidationError, match="ai_translation is only for English news and"):
             SourcesFile.model_validate(data)
+    data = sources()
+    data["sources"][-2] |= {"kind": "blog", "channel": "c", "channel_name": "C"}
+    SourcesFile.model_validate(data)  # an English blog may
 
 
 def test_translations_are_stored_apart_and_shown_on_news(engine, api):

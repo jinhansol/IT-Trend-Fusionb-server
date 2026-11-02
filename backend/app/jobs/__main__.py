@@ -6,7 +6,7 @@
     uv run python -m app.jobs collect --group dev        the scheduled list for a group
     uv run python -m app.jobs crontab                    print the cron lines for the groups
     uv run python -m app.jobs collect-report --days 7    runs and new items per source
-    uv run python -m app.jobs translate --max-calls 4    Korean titles for English news
+    uv run python -m app.jobs translate --max-calls 4    Korean titles for English news/blogs
     uv run python -m app.jobs summarize --max-calls 1    summaries of web.dev articles
     uv run python -m app.jobs summarize --body URL=FILE  summaries of bodies held locally
 
@@ -57,7 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     cron.add_argument("--schedule", type=Path, default=SCHEDULE_FILE, help=argparse.SUPPRESS)
     report = commands.add_parser("collect-report", help="runs and new items per source")
     report.add_argument("--days", type=int, default=7)
-    for name, text in (("translate", "translate English news"), ("summarize", "summarize")):
+    for name, text in (
+        ("translate", "translate English news and blogs"),
+        ("summarize", "summarize"),
+    ):
         job = commands.add_parser(name, help=f"{text} with Gemini")
         job.add_argument("--max-calls", type=int, default=4, metavar="N")
         if name == "summarize":

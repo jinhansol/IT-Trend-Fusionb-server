@@ -1,5 +1,5 @@
 // One collected article / post / question. Links open the original site.
-// News items may carry a Korean AI translation; the original is shown when there is none.
+// News and Dev items may carry a Korean AI translation; the original is shown when there is none.
 // A stored AI summary replaces the feed excerpt; without one the card is unchanged.
 // linkOnly: a board row — title, source, date and link only (no excerpt, no AI summary).
 import { ExternalLink } from "lucide-react";

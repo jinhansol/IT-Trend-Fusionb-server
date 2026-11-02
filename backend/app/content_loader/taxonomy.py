@@ -178,8 +178,8 @@ class SourceDef(_Strict):
             raise ValueError("channel and channel_name go together")
         if self.adapter == "rss" and self.feed_url is None:
             raise ValueError("rss sources need a feed_url")
-        if self.ai_translation and (self.kind != "news" or self.language != "en"):
-            raise ValueError("ai_translation is only for English news sources")
+        if self.ai_translation and (self.kind not in ("news", "blog") or self.language != "en"):
+            raise ValueError("ai_translation is only for English news and blog sources")
         if self.ai_summary and self.kind not in ("news", "blog"):
             raise ValueError("ai_summary is only for news and blog sources")
         # Store the options with defaults filled in, so the collector reads one shape.

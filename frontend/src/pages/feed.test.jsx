@@ -220,4 +220,34 @@ describe("Dev", () => {
     expect(await screen.findByText("글 1")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "AI 요약 아티클" })).toBeNull();
   });
+
+  it("shows Korean titles on the board and the featured card, with the original as fallback", async () => {
+    const ko = { language: "ko", title: "번역된 요약 글", excerpt: "번역된 소개" };
+    restore = installFakeServer({
+      "GET /dev/channels": () => [200, CHANNELS],
+      "GET /dev/featured": () => [200, { items: [{ ...featured(11), translation: ko }], page: 1, size: 2, total: 1 }],
+      "GET /dev/channels/devto/posts": () => [
+        200,
+        {
+          items: [
+            item(1, { translation: { language: "ko", title: "번역된 게시글", excerpt: "번역된 게시글 소개" } }),
+            item(2),
+          ],
+          page: 1,
+          size: 12,
+          total: 2,
+        },
+      ],
+    });
+    renderPage(<DevPage />);
+    const row = (await screen.findByText("번역된 게시글")).closest("article");
+    expect(within(row).getByRole("link", { name: /번역된 게시글/ }).getAttribute("title")).toBe("원문 제목: 글 1");
+    expect(within(row).getByText("AI 번역")).toBeTruthy();
+    expect(within(row).queryByText("번역된 게시글 소개")).toBeNull(); // board rows stay link-only
+    expect(screen.getByRole("link", { name: /글 2/ })).toBeTruthy(); // no translation: original
+
+    const top = await screen.findByRole("region", { name: "AI 요약 아티클" });
+    expect(within(top).getByRole("link", { name: /번역된 요약 글/ })).toBeTruthy();
+    expect(within(top).getByText("요약 헤드라인")).toBeTruthy();
+  });
 });

@@ -28,7 +28,7 @@ const DEV_SOURCE = {
   name: "web.dev",
   license: { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" },
 };
-const news = (id) => item(id, `뉴스 ${id}`, NEWS_SOURCE);
+const news = (id, overrides) => item(id, `뉴스 ${id}`, NEWS_SOURCE, overrides);
 const dev = (id, overrides) => item(100 + id, `아티클 ${id}`, DEV_SOURCE, overrides);
 const page = (items, total = items.length) => ({ items, page: 1, size: 3, total });
 
@@ -165,5 +165,25 @@ describe("Home", () => {
     renderHome("/?tech=python");
     expect(screen.getByText("News 화면")).toBeTruthy();
     expect(screen.getByTestId("location").textContent).toBe("/news?tech=python");
+  });
+
+  it("shows Korean titles first on news and Dev cards, and the original when there is none", async () => {
+    const ko = (title, excerpt = null) => ({ language: "ko", title, excerpt });
+    restore = server({
+      news: [news(1, { translation: ko("번역된 뉴스", "번역된 소개") }), news(2)],
+      dev: [dev(1, { translation: ko("번역된 아티클", "번역된 아티클 소개") }), dev(2)],
+    });
+    renderHome();
+    const newsBox = region("최신 IT 뉴스");
+    const devBox = region("최신 개발 아티클");
+    const newsLink = await within(newsBox).findByRole("link", { name: /번역된 뉴스/ });
+    expect(newsLink.getAttribute("title")).toBe("원문 제목: 뉴스 1");
+    expect(within(newsBox).getByText("번역된 소개")).toBeTruthy();
+    expect(within(newsBox).getByRole("link", { name: /뉴스 2/ })).toBeTruthy(); // fallback
+    const devLink = within(devBox).getByRole("link", { name: /번역된 아티클/ });
+    expect(devLink.getAttribute("title")).toBe("원문 제목: 아티클 1");
+    expect(within(devBox).getAllByText("AI 번역")).toHaveLength(1);
+    expect(within(devBox).queryByText("번역된 아티클 소개")).toBeNull(); // still title rows
+    expect(within(devBox).getByRole("link", { name: /아티클 2/ })).toBeTruthy(); // fallback
   });
 });

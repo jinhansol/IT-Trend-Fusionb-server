@@ -1,4 +1,4 @@
-"""Translate English news titles and excerpts into Korean, once per text.
+"""Translate English news and blog titles and excerpts into Korean, once per text.
 
 Only items whose source has ai_translation on are touched. An item is translated when
 it has no translation yet, when its title or excerpt changed (new input hash), or when
@@ -47,7 +47,7 @@ def translate_news(
                 select(Content)
                 .join(ContentSource, ContentSource.id == Content.source_id)
                 .where(
-                    ContentSource.kind == "news",
+                    ContentSource.kind.in_(("news", "blog")),
                     ContentSource.language == "en",
                     ContentSource.ai_translation.is_(True),
                     ContentSource.status != "retired",

@@ -287,7 +287,7 @@ def featured_ids(db: Session) -> list[int]:
 def list_dev_featured(db: Session) -> ContentPage:
     query = select(Content).where(Content.id.in_(featured_ids(db)))
     order = (Content.sort_at.desc(), Content.id.desc())
-    return _page(db, query, order, 1, FEATURED_SIZE, summary_kind="dev")
+    return _page(db, query, order, 1, FEATURED_SIZE, translated=True, summary_kind="dev")
 
 
 def list_channel_posts(
@@ -318,7 +318,7 @@ def list_channel_posts(
         order = (Content.score.desc(), Content.sort_at.desc(), Content.id.desc())
     else:
         order = (Content.sort_at.desc(), Content.id.desc())
-    return _page(db, query, order, page, size, summary_kind="dev")
+    return _page(db, query, order, page, size, translated=True, summary_kind="dev")
 
 
 def list_dev_articles(db: Session, page: int, size: int) -> ContentPage:
@@ -329,9 +329,8 @@ def list_dev_articles(db: Session, page: int, size: int) -> ContentPage:
         .join(ContentSource, ContentSource.id == Content.source_id)
         .where(_visible_sources("dev"), ContentSource.kind == "blog")
     )
-    return _page(
-        db, query, (Content.sort_at.desc(), Content.id.desc()), page, size, summary_kind="dev"
-    )
+    order = (Content.sort_at.desc(), Content.id.desc())
+    return _page(db, query, order, page, size, translated=True, summary_kind="dev")
 
 
 def trends(db: Session, scope: str, days: int) -> TrendReport:
