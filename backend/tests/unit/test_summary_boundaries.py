@@ -4,11 +4,10 @@
   fetcher), so no article page can be requested before SSRF/DNS checks exist.
 - The web app and the collector never import the summary code or the LLM interface:
   no model call can happen in a request or during collection. The one job that may
-  call a model are the translation and summary jobs (app/jobs/translate.py,
-  app/jobs/summarize.py), each run on its own.
+  call a model is the summary job (app/jobs/summarize.py), run on its own.
 - Gemini (google.genai) is reached only through app/integrations/gemini.py, and only the
   job command line (app/jobs/__main__.py) builds that client or starts those jobs.
-- Article pages are fetched only by app/jobs/article_bodies.py (web.dev, host-locked),
+- Article pages are fetched only by app/jobs/article_bodies.py (host-locked),
   which the job command line alone uses.
 """
 
@@ -58,7 +57,7 @@ def test_summary_code_has_no_network_access():
     assert found == set()
 
 
-def test_only_the_summarizer_and_translator_use_the_llm_interface():
+def test_only_the_summarizer_uses_the_llm_interface():
     users = {
         str(path.relative_to(APP))
         for path in APP.rglob("*.py")
@@ -66,8 +65,6 @@ def test_only_the_summarizer_and_translator_use_the_llm_interface():
     }
     assert users == {
         "summaries/summarizer.py",
-        "summaries/translate.py",
-        "jobs/translate.py",
         "jobs/summarize.py",
         "integrations/gemini.py",
     }
@@ -75,7 +72,6 @@ def test_only_the_summarizer_and_translator_use_the_llm_interface():
 
 def test_web_app_and_collector_do_not_import_summaries():
     jobs = {
-        APP / "jobs" / "translate.py",
         APP / "jobs" / "summarize.py",
         APP / "jobs" / "__main__.py",
         APP / "integrations" / "gemini.py",
@@ -93,7 +89,7 @@ def test_only_the_job_command_line_imports_the_model_jobs():
     users = {
         str(path.relative_to(APP))
         for path in APP.rglob("*.py")
-        if any(matches(n, ["app.jobs.translate", "app.jobs.summarize"]) for n in imports(path))
+        if any(matches(n, ["app.jobs.summarize"]) for n in imports(path))
     }
     # article_bodies only reads the summary job's attempt limit and body type.
     assert users == {"jobs/__main__.py", "jobs/article_bodies.py"}
@@ -121,3 +117,16 @@ def test_only_the_job_command_line_fetches_article_pages():
         if any(matches(n, ["app.jobs.article_bodies"]) for n in imports(path))
     }
     assert users == {"jobs/__main__.py"}
+
+
+def test_translation_code_is_gone():
+    """English->Korean translation was dropped; nothing may bring it back by accident."""
+    for gone in ("summaries/translate.py", "jobs/translate.py", "services/translations.py"):
+        assert not (APP / gone).exists(), gone
+    users = {
+        str(path.relative_to(APP))
+        for path in APP.rglob("*.py")
+        if any(matches(n, ["app.models.content.ContentTranslation"]) for n in imports(path))
+    }
+    # Only the model registry keeps it, so the unused table still matches the migrations.
+    assert users == {"models/__init__.py"}

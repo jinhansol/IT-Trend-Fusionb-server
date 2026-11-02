@@ -8,9 +8,7 @@ fixture. Nothing here is real web.dev content.
 import copy
 import re
 
-from app.content_loader.taxonomy import read_sources
 from tests.collect_helpers import SOURCES
-from tests.conftest import BACKEND_DIR
 from tests.summary_helpers import article
 
 FEED_URL = "https://web.dev/static/blog/feed.xml"
@@ -55,10 +53,22 @@ def page(slug: str, title: str, body: str | None = None, license: bool = True) -
 
 
 def webdev_source() -> dict:
-    """The web.dev entry exactly as content/sources.yaml has it."""
-    sources = read_sources(BACKEND_DIR / "content" / "sources.yaml").sources
-    entry = next(s for s in sources if s.slug == "webdev")
-    return entry.model_dump()
+    """A web.dev-style source for the article-body tests (web.dev itself was dropped from
+    content/sources.yaml with the overseas sources; the body checks stay tested)."""
+    return {
+        "slug": "webdev",
+        "name": "web.dev",
+        "kind": "blog",
+        "adapter": "rss",
+        "language": "en",
+        "site_url": "https://web.dev/",
+        "feed_url": FEED_URL,
+        "channel": "webdev",
+        "channel_name": "web.dev",
+        "max_items": 10,
+        "ai_summary": True,
+        "options": {"license": "CC-BY-4.0"},
+    }
 
 
 def sources() -> dict:

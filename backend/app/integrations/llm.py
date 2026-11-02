@@ -1,4 +1,4 @@
-"""The LLM client interface the summary and translation jobs talk to.
+"""The LLM client interface the summary job talks to.
 
 The real client (app/integrations/gemini.py) turns provider errors into LLMError kinds
 so the jobs can decide what to retry. Tests use a scripted fake client.

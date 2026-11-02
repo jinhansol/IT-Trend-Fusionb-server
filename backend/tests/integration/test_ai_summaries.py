@@ -13,12 +13,9 @@ from sqlalchemy import text
 from app.content_loader.taxonomy import SourcesFile
 from app.integrations.llm import LLMError, LLMResponse
 from app.jobs.summarize import MAX_ATTEMPTS, summarize_contents
-from app.jobs.translate import translate_news
 from app.main import create_app
 from app.summaries.policy import Budget
-from tests.collect_helpers import SOURCES, collect_all, seed_catalog
-from tests.integration.test_translations import Translator, routes
-from tests.integration.test_translations import sources as translation_sources
+from tests.collect_helpers import SOURCES, collect_all, fixture, sample_routes, seed_catalog
 from tests.summary_helpers import DEV_SPRING, NEWS_KO, article
 
 pytestmark = pytest.mark.integration
@@ -63,8 +60,47 @@ def _json(data):
     return json.dumps(data, ensure_ascii=False)
 
 
+EN_FEED = "https://en-news.example.com/rss"
+EN_PLAIN_FEED = "https://en-plain.example.com/rss"
+
+
+def base_sources() -> dict:
+    """The test catalog plus two English news feeds (synthetic)."""
+    data = copy.deepcopy(SOURCES)
+    data["sources"] += [
+        {
+            "slug": "sample-en",
+            "name": "Sample EN",
+            "kind": "news",
+            "adapter": "rss",
+            "language": "en",
+            "site_url": "https://en-news.example.com/",
+            "feed_url": EN_FEED,
+        },
+        {
+            "slug": "sample-en-plain",
+            "name": "Sample EN Plain",
+            "kind": "news",
+            "adapter": "rss",
+            "language": "en",
+            "site_url": "https://en-plain.example.com/",
+            "feed_url": EN_PLAIN_FEED,
+        },
+    ]
+    return data
+
+
+def routes(feed: bytes | None = None) -> dict:
+    r = sample_routes()
+    r[EN_FEED] = feed or fixture("news_en.rss.xml")
+    r[EN_PLAIN_FEED] = fixture("news_en.rss.xml").replace(
+        b"en-news.example.com", b"en-plain.example.com"
+    )
+    return r
+
+
 def sources(on: bool = True) -> dict:
-    data = copy.deepcopy(translation_sources())
+    data = base_sources()
     for source in data["sources"]:
         if source["slug"] in ("sample-news", "sample-blog", "sample-en"):
             source["ai_summary"] = on
@@ -177,16 +213,6 @@ def test_turning_a_source_off_hides_its_summaries(engine, settings):
 
     assert all(i["ai_summary"] is None for i in get(settings, "/api/news"))
     assert summarize_contents(engine, Model(), bodies).calls == 0
-
-
-def test_summary_and_translation_live_side_by_side(engine, settings):
-    translate_news(engine, Translator())
-    summarize_contents(engine, Model(), bodies)
-    item = by_url(get(settings, "/api/news"))[EN_URL]
-
-    assert item["title"].startswith("Nimbus delays")  # original kept
-    assert item["translation"]["title"].startswith("Nimbus, N3")
-    assert item["ai_summary"]["kind"] == "news"
 
 
 def test_the_call_budget_stops_the_run(engine):

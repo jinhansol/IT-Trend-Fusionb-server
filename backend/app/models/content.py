@@ -104,8 +104,8 @@ class ContentSource(Base):
     channel_name: Mapped[str | None] = mapped_column(String(100))
     # Order in the sources file; channels are shown in the order they first appear.
     position: Mapped[int] = mapped_column(Integer)
-    # Korean AI translation of title and excerpt is allowed (English news only, opt-in
-    # per source once its terms permit translation). Off by default.
+    # Unused: English->Korean translation was dropped with the overseas sources. The
+    # column (and content_translations) stays only to avoid a migration; nothing reads it.
     ai_translation: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     # AI summary from the article body (E1) is allowed. Off by default; only for news
     # and blog sources whose terms allow processing the body with an external model.
@@ -162,8 +162,8 @@ class Content(Base):
 
 
 class ContentTranslation(Base):
-    """Korean AI translation of one item's title and excerpt. The original row is never
-    changed; input_hash ties the translation to the text it was made from."""
+    """Unused since translation was dropped (see ContentSource.ai_translation); the table is
+    kept only to avoid a migration and is never read or written."""
 
     __tablename__ = "content_translations"
     __table_args__ = (

@@ -30,15 +30,6 @@ class SourceRef(BaseModel):
     license: LicenseRef | None = None
 
 
-class TranslationRef(BaseModel):
-    """Korean AI translation of title and excerpt (News only). The originals stay in
-    title/excerpt; the card falls back to them when this is null."""
-
-    language: str = "ko"
-    title: str
-    excerpt: str | None
-
-
 class AiSummaryRef(BaseModel):
     """E1 AI summary made from the article body. content follows the News or Dev
     schema (kind); null fields mean the article did not say."""
@@ -63,7 +54,6 @@ class ContentItem(BaseModel):
     comment_count: int | None
     view_count: int | None
     technologies: list[TechnologyRef]
-    translation: TranslationRef | None = None
     ai_summary: AiSummaryRef | None = None
 
 

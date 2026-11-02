@@ -10,11 +10,13 @@ groups:
   news:
     minute: 0
     hours: [2, 14]
-    # techcrunch: left out until the open RSS terms questions (excerpt cut, non-commercial
-    # use) are decided. Other news sources: terms not reviewed yet.
+    # No source yet: Korean news terms are not reviewed (itworld-korea and zdnet-korea
+    # parse). ZDNet's feed lists only its latest 30 items (a few hours of news), so 12-hour
+    # runs would miss articles; give it its own shorter interval if it is ever listed.
     sources: []
   dev:
     minute: 0
     hours: [5, 11, 17, 23]
-    # webdev: CC BY 4.0, checked; feed reachable.
-    sources: [webdev]
+    # No source yet: Korean blogs' reuse terms are not confirmed (kakao-tech, lycorp-tech
+    # parse; woowahan-tech blocks automated access). web.dev was dropped with overseas sources.
+    sources: []

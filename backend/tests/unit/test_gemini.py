@@ -15,7 +15,6 @@ from app.integrations.gemini import GeminiClient, GeminiNotConfigured, gemini_cl
 from app.integrations.llm import LLMError, LLMRequest
 from app.summaries.policy import Budget
 from app.summaries.summarizer import Summarizer, SummaryInput
-from app.summaries.translate import build_request, translate
 from tests.summary_helpers import DEV_SPRING, NEWS_KO, article
 
 KEY = "test-key-not-real-0123456789"
@@ -98,22 +97,6 @@ def test_the_sdk_client_makes_one_attempt_with_the_configured_timeout():
     assert gemini._client._api_client.vertexai is False
 
 
-def test_translation_through_gemini():
-    gemini, models = client(
-        answer(
-            json.dumps(
-                {"title": "Nimbus, N3 출시를 2027년으로 연기", "excerpt": None},
-                ensure_ascii=False,
-            )
-        )
-    )
-    result = translate(gemini, "Nimbus delays its N3 AI accelerator to 2027", None)
-    assert (result.status, result.title) == ("done", "Nimbus, N3 출시를 2027년으로 연기")
-    expected = build_request("Nimbus delays its N3 AI accelerator to 2027", None)
-    assert models.calls[0]["contents"] == expected.user
-    assert models.calls[0]["config"].system_instruction == expected.system
-
-
 @pytest.mark.parametrize(
     ("kind", "page", "payload", "field"),
     [
@@ -138,12 +121,6 @@ def test_invalid_json_is_asked_once_more_then_fails():
     )
     assert (outcome.status, outcome.error_code, outcome.payload) == ("failed", "invalid_json", None)
     assert len(models.calls) == 2
-
-
-def test_invalid_translation_answer_fails_without_a_result():
-    gemini, _ = client(answer('{"title": 1}'))
-    result = translate(gemini, "Nimbus delays N3", None)
-    assert (result.status, result.error_code, result.title) == ("failed", "invalid_answer", None)
 
 
 @pytest.mark.parametrize(
