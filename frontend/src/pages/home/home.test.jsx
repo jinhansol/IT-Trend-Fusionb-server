@@ -109,7 +109,7 @@ describe("Home", () => {
     expect(within(career).getByRole("link", { name: /진로 탐색/ }).getAttribute("href")).toBe("/career/explore");
   });
 
-  it("keeps the AI summary and license on Dev cards and shows cards without one as they are", async () => {
+  it("shows Dev articles as title rows: no excerpt and no AI summary, news unchanged", async () => {
     const summary = {
       kind: "dev",
       partial_input: false,
@@ -118,9 +118,15 @@ describe("Home", () => {
     restore = server({ news: [news(1)], dev: [dev(1, { ai_summary: summary }), dev(2)] });
     renderHome();
     const devBox = region("최신 개발 아티클");
-    expect(await within(devBox).findByText("요약 제목")).toBeTruthy();
-    expect(within(devBox).getByRole("link", { name: "CC BY 4.0" }).getAttribute("href")).toBe(DEV_SOURCE.license.url);
-    expect(within(devBox).getByText("아티클 2 소개")).toBeTruthy(); // no summary: the excerpt
+    const link = await within(devBox).findByRole("link", { name: /아티클 1/ });
+    expect(link.getAttribute("href")).toBe("https://example.com/101");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(within(devBox).getAllByText("web.dev")).toHaveLength(2);
+    expect(within(devBox).queryByText("요약 제목")).toBeNull();
+    expect(within(devBox).queryByText("아티클 2 소개")).toBeNull();
+    expect(within(devBox).queryByRole("region", { name: "AI 요약" })).toBeNull();
+    expect(within(region("최신 IT 뉴스")).getByText("뉴스 1 소개")).toBeTruthy();
   });
 
   it("shows only what exists: none, one, or a short list", async () => {

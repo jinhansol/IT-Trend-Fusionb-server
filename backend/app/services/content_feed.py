@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session, aliased, selectinload
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.types import utc_now
-from app.models.content import Content, ContentSource, ContentTechnology, JobRun, Technology
+from app.models.content import (
+    Content,
+    ContentSource,
+    ContentSummary,
+    ContentTechnology,
+    JobRun,
+    Technology,
+)
 from app.schemas.content import (
     AiSummaryRef,
     ChannelSource,
@@ -247,8 +254,51 @@ def list_channels(db: Session) -> DevChannelList:
     return DevChannelList(items=list(channels.values()))
 
 
+# --- Dev featured articles ------------------------------------------------------------------
+#
+# The top of Dev shows at most FEATURED_SIZE articles that have a stored AI summary, newest
+# first. A source qualifies only through its reviewed ai_summary switch (content/sources.yaml,
+# set once its terms allow summaries); a license field alone is not enough. The channel
+# lists can leave these out, so an article is not shown twice and paging stays exact.
+FEATURED_SIZE = 2
+
+
+def _featured() -> Select:
+    return (
+        select(Content)
+        .join(ContentSource, ContentSource.id == Content.source_id)
+        .join(ContentSummary, ContentSummary.content_id == Content.id)
+        .where(
+            _visible_sources("dev"),
+            ContentSource.ai_summary.is_(True),
+            ContentSummary.status == "done",
+            ContentSummary.kind == "dev",
+        )
+    )
+
+
+def featured_ids(db: Session) -> list[int]:
+    query = _featured().with_only_columns(Content.id)
+    return list(
+        db.scalars(query.order_by(Content.sort_at.desc(), Content.id.desc()).limit(FEATURED_SIZE))
+    )
+
+
+def list_dev_featured(db: Session) -> ContentPage:
+    query = select(Content).where(Content.id.in_(featured_ids(db)))
+    order = (Content.sort_at.desc(), Content.id.desc())
+    return _page(db, query, order, 1, FEATURED_SIZE, summary_kind="dev")
+
+
 def list_channel_posts(
-    db: Session, channel: str, sort: str, days: int, page: int, size: int, tech: str | None
+    db: Session,
+    channel: str,
+    sort: str,
+    days: int,
+    page: int,
+    size: int,
+    tech: str | None,
+    exclude_featured: bool = False,
 ) -> ContentPage:
     sources = list(
         db.scalars(
@@ -258,6 +308,8 @@ def list_channel_posts(
     if not sources:
         raise ChannelNotFound()
     query = select(Content).where(Content.source_id.in_([s.id for s in sources]))
+    if exclude_featured and (shown := featured_ids(db)):
+        query = query.where(Content.id.not_in(shown))
     query = _with_technology(query, tech)
     if sort == "popular":
         if all(s.adapter == "rss" for s in sources):

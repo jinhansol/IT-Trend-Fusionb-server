@@ -155,4 +155,69 @@ describe("Dev", () => {
     expect(screen.getByRole("button", { name: "주간 인기" }).disabled).toBe(true);
     expect(calls.at(-1)).toEqual(["kr-techblog", "latest"]);
   });
+
+  const SUMMARY = {
+    kind: "dev",
+    partial_input: false,
+    content: { headline: "요약 헤드라인", key_concepts: [], implementation: null, applicable_when: [], caveats: [] },
+  };
+  const LICENSE = { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" };
+  const featured = (id) =>
+    item(id, { title: `요약 글 ${id}`, ai_summary: SUMMARY, source: { slug: "webdev", name: "web.dev", license: LICENSE } });
+
+  function devServer(featuredItems, boardRequests = []) {
+    return installFakeServer({
+      "GET /dev/channels": () => [200, CHANNELS],
+      "GET /trends": () => [200, { ...TRENDS, scope: "dev" }],
+      "GET /feed-status": () => [200, { ...STATUS, scope: "dev" }],
+      "GET /dev/featured": () => [200, { items: featuredItems, page: 1, size: 2, total: featuredItems.length }],
+      "GET /dev/channels/devto/posts": (config) => {
+        boardRequests.push(config.params);
+        const board = item(1, { excerpt: "게시판 소개문", ai_summary: SUMMARY });
+        return [200, { items: [board], page: 1, size: 12, total: 1 }];
+      },
+    });
+  }
+
+  it.each([
+    [0, []],
+    [1, [featured(11)]],
+    [2, [featured(11), featured(12)]],
+  ])("shows %i AI-summarized article(s) on top and a link-only board below", async (count, items) => {
+    const boardRequests = [];
+    restore = devServer(items, boardRequests);
+    renderPage(<DevPage />);
+
+    const row = (await screen.findByText("글 1")).closest("article");
+    // The board: title, source, date and link; never the excerpt or a summary.
+    expect(within(row).queryByText("게시판 소개문")).toBeNull();
+    expect(within(row).queryByRole("region", { name: "AI 요약" })).toBeNull();
+    const link = within(row).getByRole("link", { name: /글 1/ });
+    expect(link.getAttribute("href")).toBe("https://example.com/1");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(within(row).getByText("출처")).toBeTruthy();
+    expect(within(row).getByRole("time")).toBeTruthy();
+    // The board asks the API to leave the featured articles out (no duplicates).
+    expect(boardRequests[0].exclude_featured).toBe(true);
+
+    const top = screen.queryByRole("region", { name: "AI 요약 아티클" });
+    if (count === 0) {
+      expect(top).toBeNull();
+      return;
+    }
+    await waitFor(() => expect(within(top).getAllByRole("article")).toHaveLength(count));
+    expect(within(top).getAllByText("요약 헤드라인")).toHaveLength(count);
+    expect(within(top).getAllByRole("link", { name: "CC BY 4.0" })).toHaveLength(count);
+  });
+
+  it("hides the top section when the featured list fails to load", async () => {
+    restore = installFakeServer({
+      "GET /dev/channels": () => [200, CHANNELS],
+      "GET /dev/featured": () => [500, {}],
+      "GET /dev/channels/devto/posts": () => [200, { items: [item(1)], page: 1, size: 12, total: 1 }],
+    });
+    renderPage(<DevPage />);
+    expect(await screen.findByText("글 1")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "AI 요약 아티클" })).toBeNull();
+  });
 });

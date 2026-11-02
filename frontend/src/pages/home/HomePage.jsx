@@ -14,7 +14,7 @@ function asList(resource) {
   return { status: resource.status, items: resource.data?.items ?? [], hasMore: false };
 }
 
-function LatestSection({ id, title, description, moreTo, moreLabel, resource, emptyText }) {
+function LatestSection({ id, title, description, moreTo, moreLabel, resource, emptyText, linkOnly = false }) {
   return (
     <section aria-labelledby={id} className="mt-12">
       <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
@@ -29,7 +29,7 @@ function LatestSection({ id, title, description, moreTo, moreLabel, resource, em
           <ArrowRight size={14} aria-hidden="true" />
         </Link>
       </div>
-      <FeedList list={asList(resource)} emptyText={emptyText} />
+      <FeedList list={asList(resource)} emptyText={emptyText} linkOnly={linkOnly} />
     </section>
   );
 }
@@ -89,6 +89,7 @@ function HomeSections() {
         moreLabel="Dev 전체 보기"
         resource={dev}
         emptyText="아직 수집된 개발 아티클이 없습니다."
+        linkOnly
       />
       <CareerEntry />
     </main>

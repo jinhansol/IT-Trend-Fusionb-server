@@ -1,7 +1,7 @@
 // Grid of ContentCards with loading, empty, error and "더 보기" states.
 import ContentCard from "./ContentCard";
 
-export default function FeedList({ list, metrics, emptyText }) {
+export default function FeedList({ list, metrics, emptyText, linkOnly = false }) {
   if (list.status === "loading") return <p className="text-slate-400 py-10 text-center">불러오는 중...</p>;
   if (list.status === "error") {
     return <p className="text-slate-600 py-10 text-center">목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</p>;
@@ -14,7 +14,7 @@ export default function FeedList({ list, metrics, emptyText }) {
       <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {list.items.map((item) => (
           <li key={item.id}>
-            <ContentCard item={item} metrics={metrics} now={now} />
+            <ContentCard item={item} metrics={metrics} now={now} linkOnly={linkOnly} />
           </li>
         ))}
       </ul>

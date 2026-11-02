@@ -15,10 +15,19 @@ export async function fetchDevChannels() {
   return data.items; // [{ slug, name, kind, has_metrics, sources }]
 }
 
-export async function fetchChannelPosts(channel, { sort = "latest", days = 7, page = 1, size = 12, tech } = {}) {
+export async function fetchChannelPosts(
+  channel,
+  { sort = "latest", days = 7, page = 1, size = 12, tech, excludeFeatured } = {}
+) {
   const { data } = await apiClient.get(`/dev/channels/${seg(channel)}/posts`, {
-    params: clean({ sort, days, page, size, tech }),
+    params: clean({ sort, days, page, size, tech, exclude_featured: excludeFeatured ? true : null }),
   });
+  return data; // { items, page, size, total }
+}
+
+/** Up to two Dev articles with a stored AI summary from a source whose terms allow it. */
+export async function fetchDevFeatured() {
+  const { data } = await apiClient.get("/dev/featured");
   return data; // { items, page, size, total }
 }
 

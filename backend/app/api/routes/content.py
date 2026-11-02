@@ -38,9 +38,17 @@ def list_channel_posts(
     page: int = Page,
     size: int = Size,
     tech: str | None = Tech,
+    exclude_featured: bool = False,
     db: Session = Depends(get_db),
 ) -> ContentPage:
-    return content_feed.list_channel_posts(db, channel, sort, days, page, size, tech)
+    return content_feed.list_channel_posts(
+        db, channel, sort, days, page, size, tech, exclude_featured
+    )
+
+
+@router.get("/dev/featured", response_model=ContentPage)
+def list_dev_featured(db: Session = Depends(get_db)) -> ContentPage:
+    return content_feed.list_dev_featured(db)
 
 
 @router.get("/dev/articles", response_model=ContentPage)
