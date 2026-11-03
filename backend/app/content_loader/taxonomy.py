@@ -116,23 +116,36 @@ def apply_technologies(db: Session, content: TechnologiesFile) -> LoadReport:
 # --- sources ------------------------------------------------------------------------------
 
 
-class RssOptions(_Strict):
+class _SourceUse(_Strict):
+    """How far the source's terms let DevHub use it (app/services/source_terms.py).
+
+    terms     unverified: read-only diagnosis only; nothing is stored or scheduled.
+              approved: the terms were checked and allow collecting and showing title,
+              source, date and link.
+    excerpt   also show the feed's own description (needs terms: approved).
+    """
+
+    terms: Literal["unverified", "approved"] = "unverified"
+    excerpt: bool = False
+
+
+class RssOptions(_SourceUse):
     # The license the source's pages carry, shown with AI summaries made from them.
     license: Literal["CC-BY-4.0"] | None = None
 
 
-class DevtoOptions(_Strict):
+class DevtoOptions(_SourceUse):
     tag: Slug | None = None
     # Dev.to "top" articles of the last N days; omitted means the latest articles.
     top_days: int | None = Field(default=None, ge=1, le=30)
 
 
-class HackerNewsOptions(_Strict):
+class HackerNewsOptions(_SourceUse):
     # Algolia tags: front_page, story, ask_hn, show_hn.
     tags: Literal["front_page", "story", "ask_hn", "show_hn"] = "front_page"
 
 
-class StackOverflowOptions(_Strict):
+class StackOverflowOptions(_SourceUse):
     site: Literal["stackoverflow"] = "stackoverflow"
     sort: Literal["hot", "activity", "votes", "week"] = "hot"
     tagged: Annotated[str, StringConstraints(max_length=100)] | None = None
@@ -181,6 +194,11 @@ class SourceDef(_Strict):
         # Store the options with defaults filled in, so the collector reads one shape.
         model = _OPTIONS[self.adapter]
         self.options = model.model_validate(self.options).model_dump(exclude_none=True)
+        if self.options["terms"] != "approved":
+            if self.options["excerpt"]:
+                raise ValueError("options.excerpt needs options.terms: approved")
+            if self.ai_summary:
+                raise ValueError("ai_summary needs options.terms: approved")
         return self
 
 

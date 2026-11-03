@@ -8,6 +8,10 @@
   (job_runs.failed_count, reasons in error_summary); the rest are saved. A response in
   which every entry is unusable fails the source, since that means the format changed.
 - Fetching happens outside any transaction; saving is one transaction per source.
+- Only active sources whose terms are approved are saved (app/services/source_terms.py);
+  any other source is refused before anything is requested or written. A dry run may
+  read any source, since it writes nothing.
+- With a RobotsPolicy, an RSS feed whose robots.txt disallows it is not requested.
 """
 
 from dataclasses import dataclass, field
@@ -16,10 +20,12 @@ from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 from app.db.types import utc_now
-from app.integrations.http import Fetcher
+from app.integrations.http import Fetcher, FetchError
+from app.integrations.robots import RobotsPolicy
 from app.integrations.sources import Adapter, Batch, SourceConfig
 from app.jobs.store import store_items
 from app.models.content import ContentSource, JobRun
+from app.services.source_terms import collect_refusal
 from app.services.tagging import load_tagger
 
 JOB_NAME = "collect"
@@ -33,7 +39,7 @@ class UnknownSource(ValueError):
 @dataclass
 class SourceResult:
     slug: str
-    status: str  # succeeded | failed | skipped | dry-run
+    status: str  # succeeded | failed | skipped | refused | dry-run
     fetched: int = 0  # usable entries
     inserted: int = 0
     updated: int = 0
@@ -84,11 +90,18 @@ class UnusableResponse(Exception):
 
 
 class Collector:
-    def __init__(self, engine: Engine, fetcher: Fetcher, adapters: dict[str, Adapter]) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        fetcher: Fetcher,
+        adapters: dict[str, Adapter],
+        robots: RobotsPolicy | None = None,
+    ) -> None:
         self._engine = engine
         self._sessions = sessionmaker(bind=engine, expire_on_commit=False)
         self._fetcher = fetcher
         self._adapters = adapters
+        self._robots = robots
 
     def sources(self, slugs: list[str] | None = None) -> list[ContentSource]:
         with self._sessions() as db:
@@ -102,6 +115,10 @@ class Collector:
             return list(db.scalars(query.where(ContentSource.status == "active")))
 
     def fetch(self, source: ContentSource) -> Batch:
+        if self._robots is not None and source.adapter == "rss" and source.feed_url:
+            verdict = self._robots.check(source.feed_url)
+            if not verdict.allowed:
+                raise FetchError(f"not requested: {verdict.reason}")
         batch = self._adapters[source.adapter](self._fetcher, _config(source))
         if batch.skipped and not batch.items:
             raise UnusableResponse(_skip_text(batch), sum(batch.skipped.values()))
@@ -123,6 +140,9 @@ class Collector:
         )
 
     def run(self, source: ContentSource) -> SourceResult:
+        refusal = collect_refusal(source)
+        if refusal is not None:
+            return SourceResult(source.slug, "refused", error=refusal)
         with self._engine.connect() as lock:
             acquired = lock.scalar(text("SELECT GET_LOCK(:name, 0)"), {"name": _lock_name(source)})
             if acquired != 1:

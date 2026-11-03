@@ -53,12 +53,22 @@ MAX_REDIRECTS = 5
 
 class FetchError(Exception):
     def __init__(
-        self, message: str, retryable: bool = False, retry_after: float | None = None
+        self,
+        message: str,
+        retryable: bool = False,
+        retry_after: float | None = None,
+        status: int | None = None,
     ) -> None:
         super().__init__(message)
         self.retryable = retryable
         # Seconds the server asked us to wait (429); None means "use the backoff".
         self.retry_after = retry_after
+        # The HTTP status when the server answered with something other than 200.
+        self.status = status
+
+
+class InsecureRedirect(FetchError):
+    """An https address redirected to plain http; the redirect was not followed."""
 
 
 class Fetcher(Protocol):
@@ -197,7 +207,7 @@ class HttpFetcher:
         except FetchError as exc:
             raise FetchError(f"redirect from {_where(response.url)} refused: {exc}") from None
         if response.url.scheme == "https" and target.scheme != "https":
-            raise FetchError(f"redirect from {_where(response.url)} to plain http refused")
+            raise InsecureRedirect(f"redirect from {_where(response.url)} to plain http refused")
         try:
             self._check_allowed(target)
         except FetchError as exc:
@@ -219,10 +229,14 @@ class HttpFetcher:
         if status == 429:
             wait = retry_after_seconds(response.headers.get("retry-after"))
             if wait is not None and wait > MAX_RETRY_AFTER_SECONDS:
-                raise FetchError(f"HTTP 429 from {where} (retry after {wait:.0f}s, not waiting)")
-            raise FetchError(f"HTTP 429 from {where}", retryable=True, retry_after=wait)
+                raise FetchError(
+                    f"HTTP 429 from {where} (retry after {wait:.0f}s, not waiting)", status=429
+                )
+            raise FetchError(f"HTTP 429 from {where}", retryable=True, retry_after=wait, status=429)
         if status != 200:
-            raise FetchError(f"HTTP {status} from {where}", retryable=status in _RETRY_STATUSES)
+            raise FetchError(
+                f"HTTP {status} from {where}", retryable=status in _RETRY_STATUSES, status=status
+            )
         declared = response.headers.get("content-length", "")
         if declared.isdigit() and int(declared) > self._max_bytes:
             raise FetchError(f"response from {where} exceeds the size limit")

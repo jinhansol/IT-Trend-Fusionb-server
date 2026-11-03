@@ -29,7 +29,7 @@ def catalog() -> dict:
     for source in data["sources"]:
         if source["slug"] == "sample-blog":
             # A license field without the reviewed ai_summary switch: never featured.
-            source["options"] = {"license": "CC-BY-4.0"}
+            source["options"] = {**source["options"], "license": "CC-BY-4.0"}
     return data
 
 

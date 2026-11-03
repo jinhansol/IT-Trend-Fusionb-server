@@ -15,7 +15,14 @@ from app.integrations.llm import LLMError, LLMResponse
 from app.jobs.summarize import MAX_ATTEMPTS, summarize_contents
 from app.main import create_app
 from app.summaries.policy import Budget
-from tests.collect_helpers import SOURCES, collect_all, fixture, sample_routes, seed_catalog
+from tests.collect_helpers import (
+    APPROVED,
+    SOURCES,
+    collect_all,
+    fixture,
+    sample_routes,
+    seed_catalog,
+)
 from tests.summary_helpers import DEV_SPRING, NEWS_KO, article
 
 pytestmark = pytest.mark.integration
@@ -76,6 +83,7 @@ def base_sources() -> dict:
             "language": "en",
             "site_url": "https://en-news.example.com/",
             "feed_url": EN_FEED,
+            "options": dict(APPROVED),
         },
         {
             "slug": "sample-en-plain",
@@ -85,6 +93,7 @@ def base_sources() -> dict:
             "language": "en",
             "site_url": "https://en-plain.example.com/",
             "feed_url": EN_PLAIN_FEED,
+            "options": dict(APPROVED),
         },
     ]
     return data

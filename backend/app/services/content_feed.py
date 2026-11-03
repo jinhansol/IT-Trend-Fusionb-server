@@ -2,6 +2,7 @@
 
 Lists are ordered by publish time (collection time when a feed gives none).
 Retired sources are hidden; paused sources keep showing what was collected.
+A feed description (excerpt) is returned only for sources whose terms allow it.
 
 Home news is de-duplicated (A-plan v0.2, C-4): rows with the same normalized URL
 hash from different news sources form one group, shown once through a
@@ -40,6 +41,7 @@ from app.schemas.content import (
     TechnologyRef,
     TrendReport,
 )
+from app.services.source_terms import shows_excerpt
 from app.services.summaries import shown_summaries
 
 TOP_TECHNOLOGIES = 10
@@ -79,7 +81,9 @@ def _item(content: Content) -> ContentItem:
         id=content.id,
         title=content.title,
         url=content.url,
-        excerpt=content.excerpt,
+        # The feed's description is stored (it feeds tagging) but shown only when the
+        # source's checked terms allow it; otherwise the card is title, source, date, link.
+        excerpt=content.excerpt if shows_excerpt(content.source) else None,
         author=content.author,
         source=SourceRef(
             slug=content.source.slug,

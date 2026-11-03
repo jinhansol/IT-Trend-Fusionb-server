@@ -22,12 +22,17 @@ class FakeFetcher:
         self.calls.append((url, params))
         answer = self.routes.get(url)
         if answer is None:
-            raise FetchError(f"HTTP 404 from {url}")
+            raise FetchError(f"HTTP 404 from {url}", status=404)
         if isinstance(answer, Exception):
             raise answer
         if callable(answer):
             return answer(params)
         return fixture(answer) if isinstance(answer, str) else answer
+
+
+def feed_requests(fetcher: FakeFetcher) -> set[str]:
+    """The URLs requested, without the robots.txt checks made before each RSS feed."""
+    return {url for url, _ in fetcher.calls if not url.endswith("/robots.txt")}
 
 
 # --- a small catalog for integration tests ------------------------------------------------
@@ -63,6 +68,10 @@ TECHNOLOGIES = {
     ]
 }
 
+# The test catalog stands for sources whose terms were checked: collected and shown with
+# their feed descriptions. Tests of the unverified default build their own sources.
+APPROVED = {"terms": "approved", "excerpt": True}
+
 SOURCES = {
     "sources": [
         {
@@ -73,6 +82,7 @@ SOURCES = {
             "language": "ko",
             "site_url": "https://news.example.com/",
             "feed_url": "https://news.example.com/rss",
+            "options": dict(APPROVED),
         },
         {
             "slug": "devto",
@@ -81,7 +91,7 @@ SOURCES = {
             "adapter": "devto",
             "language": "en",
             "site_url": "https://dev.to/",
-            "options": {"top_days": 7},
+            "options": {"top_days": 7, **APPROVED},
             "channel": "devto",
             "channel_name": "DEV Community",
         },
@@ -92,6 +102,7 @@ SOURCES = {
             "adapter": "hackernews",
             "language": "en",
             "site_url": "https://news.ycombinator.com/",
+            "options": dict(APPROVED),
             "channel": "hackernews",
             "channel_name": "Hacker News",
         },
@@ -102,6 +113,7 @@ SOURCES = {
             "adapter": "stackoverflow",
             "language": "en",
             "site_url": "https://stackoverflow.com/",
+            "options": dict(APPROVED),
             "channel": "stackoverflow",
             "channel_name": "Stack Overflow",
         },
@@ -113,6 +125,7 @@ SOURCES = {
             "language": "ko",
             "site_url": "https://blog.example.com/",
             "feed_url": "https://blog.example.com/atom",
+            "options": dict(APPROVED),
             "channel": "kr-techblog",
             "channel_name": "국내 기술블로그",
         },

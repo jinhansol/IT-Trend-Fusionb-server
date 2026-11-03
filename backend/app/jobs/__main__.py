@@ -1,8 +1,9 @@
 """Collector and AI job command line. Runs separately from the web app.
 
-    uv run python -m app.jobs collect                    every active source
-    uv run python -m app.jobs collect --source bloter    one or more sources
+    uv run python -m app.jobs collect                    every active, terms-approved source
+    uv run python -m app.jobs collect --source bloter    one or more sources (same rule)
     uv run python -m app.jobs collect --dry-run          fetch and parse only, save nothing
+    uv run python -m app.jobs diagnose [--source SLUG]   read-only feed check from sources.yaml
     uv run python -m app.jobs collect --group dev        the scheduled list for a group
     uv run python -m app.jobs crontab                    print the cron lines for the groups
     uv run python -m app.jobs collect-report --days 7    runs and new items per source
@@ -15,6 +16,12 @@ sources app/jobs/article_bodies.py knows how to check (none registered at presen
 --body it uses the given local HTML or Markdown files and downloads nothing.
 --group reads content/collect-schedule.yaml (app/jobs/schedule.py); scheduled runs never
 call Gemini. Exit status is 1 when any source or item failed, 2 for a usage or setup error.
+
+collect saves only sources that are active and whose options.terms is approved; any
+other source is reported as "refused" without a request or a database write. --dry-run
+and diagnose write nothing and may read paused or unverified sources. Every RSS request
+of collect, --dry-run and diagnose is preceded by a robots.txt check (app/integrations/
+robots.py). diagnose needs no database: it reads content/sources.yaml.
 """
 
 import argparse
@@ -25,17 +32,22 @@ from pathlib import Path
 
 from sqlalchemy import text as sql
 
+from app.content_loader.taxonomy import read_sources
 from app.core.config import get_settings
 from app.db.session import create_db_engine
 from app.db.types import utc_now
 from app.integrations.gemini import GeminiNotConfigured, gemini_client
 from app.integrations.http import HttpFetcher
+from app.integrations.robots import RobotsPolicy
 from app.integrations.sources import adapters
 from app.jobs.article_bodies import WEBDEV_HOSTS, finished_ids, webdev_bodies
+from app.jobs.diagnose import diagnose
 from app.jobs.runner import Collector, UnknownSource
 from app.jobs.schedule import GROUPS, SCHEDULE_FILE, check_sources, crontab, load_schedule
 from app.jobs.summarize import summarize_contents
 from app.summaries.policy import Budget
+
+SOURCES_FILE = Path(__file__).resolve().parents[2] / "content" / "sources.yaml"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -53,6 +65,12 @@ def main(argv: list[str] | None = None) -> int:
     cron.add_argument("--log-dir", type=Path, default=Path("/var/log/devhub"))
     cron.add_argument("--server-tz", default="UTC", help="the server's time zone (timedatectl)")
     cron.add_argument("--schedule", type=Path, default=SCHEDULE_FILE, help=argparse.SUPPRESS)
+    check = commands.add_parser("diagnose", help="read-only feed check (no database)")
+    picked = check.add_mutually_exclusive_group()
+    picked.add_argument("--source", action="append", dest="sources", metavar="SLUG")
+    picked.add_argument("--group", choices=GROUPS)
+    check.add_argument("--sources-file", type=Path, default=SOURCES_FILE, help=argparse.SUPPRESS)
+    check.add_argument("--schedule", type=Path, default=SCHEDULE_FILE, help=argparse.SUPPRESS)
     report = commands.add_parser("collect-report", help="runs and new items per source")
     report.add_argument("--days", type=int, default=7)
     job = commands.add_parser("summarize", help="summarize articles with Gemini")
@@ -70,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
         print(lines, end="")
         return 0
     settings = get_settings()
+    if args.command == "diagnose":
+        return _diagnose(args, settings)
     if args.command == "collect-report":
         return _report(settings, args.days)
     if args.command != "collect":
@@ -78,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     engine = create_db_engine(settings)
     fetcher = HttpFetcher(settings)
     try:
-        collector = Collector(engine, fetcher, adapters(key))
+        collector = Collector(engine, fetcher, adapters(key), RobotsPolicy(fetcher))
         try:
             if args.group:
                 listed = load_schedule(args.schedule).groups[args.group].sources
@@ -104,10 +124,41 @@ def main(argv: list[str] | None = None) -> int:
         engine.dispose()
 
     failed = sum(r.status == "failed" for r in results)
+    refused = sum(r.status == "refused" for r in results)
     print(
         f"database: {settings.database_name} — {len(results)} sources, {failed} failed"
+        + (f", {refused} refused" if refused else "")
         + (f" (group {args.group})" if args.group else "")
         + (" (dry run, nothing saved)" if args.dry_run else "")
+    )
+    return 1 if failed else 0
+
+
+def _diagnose(args, settings) -> int:
+    """Read-only: sources.yaml + robots.txt + one request per feed; no database."""
+    listed = read_sources(args.sources_file).sources
+    if args.sources:
+        unknown = set(args.sources) - {s.slug for s in listed}
+        if unknown:
+            print(f"unknown source: {', '.join(sorted(unknown))}", file=sys.stderr)
+            return 2
+        listed = [s for s in listed if s.slug in args.sources]
+    elif args.group:
+        listed = [s for s in listed if (s.kind == "news") == (args.group == "news")]
+    fetcher = HttpFetcher(settings)
+    try:
+        reports = diagnose(listed, fetcher, load_schedule(args.schedule))
+    finally:
+        fetcher.close()
+    for report in reports:
+        print(report.line(), flush=True)
+        for title in report.titles:
+            print(f"    · {title}")
+    failed = sum(r.outcome == "failed" for r in reports)
+    blocked = sum(r.outcome == "not requested" for r in reports)
+    print(
+        f"diagnose — {len(reports)} sources, {failed} failed, {blocked} not requested "
+        "(read-only, nothing saved)"
     )
     return 1 if failed else 0
 

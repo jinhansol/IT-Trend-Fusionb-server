@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, text
 
 from app.main import create_app
-from tests.collect_helpers import SOURCES, collect_all, sample_routes, seed_catalog
+from tests.collect_helpers import APPROVED, SOURCES, collect_all, sample_routes, seed_catalog
 from tests.integration.test_content_api import shift_dates_to_now
 
 pytestmark = pytest.mark.integration
@@ -28,6 +28,7 @@ NEWS_2 = {
     "language": "ko",
     "site_url": "https://news2.example.com/",
     "feed_url": "https://news2.example.com/rss",
+    "options": dict(APPROVED),
 }
 
 

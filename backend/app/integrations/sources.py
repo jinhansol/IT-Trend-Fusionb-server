@@ -15,7 +15,7 @@ from calendar import timegm
 from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import feedparser
 
@@ -157,8 +157,43 @@ def _batch(entries: Iterable, convert: Callable[[dict], CollectedItem], limit=No
 # --- RSS / Atom ---------------------------------------------------------------------------
 
 
+# "2026.11.02" or "2026.11.02 14:30": common on Korean public sites. feedparser reads it as
+# a wrong date (the same day for every entry), so it is parsed here first.
+_DOTTED_DATE = re.compile(
+    r"^\s*(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*$"
+)
+# A publish time this far in the future is a misread date, not a real one.
+FUTURE_TOLERANCE = timedelta(days=1)
+
+
+def _dotted(value) -> datetime | None:
+    match = _DOTTED_DATE.match(value) if isinstance(value, str) else None
+    if not match:
+        return None
+    year, month, day, hour, minute, second = (int(g) if g else 0 for g in match.groups())
+    try:
+        return datetime(year, month, day, hour, minute, second)  # no zone given: read as UTC
+    except ValueError:
+        return None
+
+
+def feed_date(entry: dict, now: datetime | None = None) -> datetime | None:
+    """The entry's publish (else update) time as naive UTC, or None when it is missing,
+    unreadable or implausible. A missing date is never replaced by the collection time."""
+    published = None
+    for raw, parsed in (("published", "published_parsed"), ("updated", "updated_parsed")):
+        published = _dotted(entry.get(raw))
+        if published is None and entry.get(parsed):
+            published = _from_epoch(timegm(entry.get(parsed)))
+        if published is not None:
+            break
+    if published is None:
+        return None
+    limit = (now or datetime.now(UTC).replace(tzinfo=None)) + FUTURE_TOLERANCE
+    return published if published <= limit else None
+
+
 def _feed_item(entry: dict) -> CollectedItem:
-    published = entry.get("published_parsed") or entry.get("updated_parsed")
     entry_id = entry.get("id")
     return CollectedItem(
         url=checked_url(entry.get("link")),
@@ -166,14 +201,16 @@ def _feed_item(entry: dict) -> CollectedItem:
         external_id=str(entry_id)[:255] if entry_id else None,
         excerpt=_text(entry.get("summary"), EXCERPT_CHARS),
         author=_text(entry.get("author"), 200),
-        published_at=_from_epoch(timegm(published)) if published else None,
+        published_at=feed_date(entry),
         tags=_tags([t.get("term") for t in entry.get("tags", []) if isinstance(t, dict)]),
     )
 
 
 def parse_feed(data: bytes, limit: int) -> Batch:
+    if not data or not data.strip():
+        raise FetchError("not a readable RSS/Atom feed (empty response)")
     feed = feedparser.parse(data)
-    if not feed.entries and (feed.bozo or not feed.version):
+    if not feed.entries and (feed.bozo or not feed.get("version")):
         reason = type(feed.get("bozo_exception")).__name__ if feed.bozo else "no feed found"
         raise FetchError(f"not a readable RSS/Atom feed ({reason})")
     return _batch(feed.entries, _feed_item, limit)
