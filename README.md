@@ -1,237 +1,261 @@
-# 📋 DevHub: Developer Trend Fusion Dashboard
+# DevHub 2.0
 
-![Project Status](https://img.shields.io/badge/Status-Completed-success?style=flat&logo=git&logoColor=white) ![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=flat) ![License](https://img.shields.io/badge/License-MIT-green?style=flat)
+> 국내 IT 뉴스와 국내 개발 기술 블로그를 한곳에서 탐색하고, 관심 기술을 Career 학습으로 이어 가는 개발자 정보 플랫폼
 
-> **"정보의 홍수 속에서, 나에게 필요한 기술만 큐레이션하다."** <br/>
-> 사용자의 기술 스택과 관심사를 분석하여 **맞춤형 학습 로드맵**과 **기술 아티클**을 추천해주는 **개인화 대시보드** 서비스입니다.
+DevHub 2.0은 학교 파이널 프로젝트였던 DevHub 1.0을 새 백엔드·새 스키마로 다시 만든 개인 프로젝트입니다. 화면에 보이는 정보는 모두 DB에 저장된 내용이며, 수집·AI 처리는 웹 요청과 분리된 별도 작업으로만 실행됩니다.
+
+| | |
+| :--- | :--- |
+| **구성** | Home(뉴스·개발 아티클 요약) · News · Dev · Career(학습·진로) |
+| **백엔드** | FastAPI · SQLAlchemy 2 · Alembic · MariaDB 11.4 |
+| **프론트엔드** | React 19 · Vite 7 · Tailwind CSS 3 |
+| **테스트** | pytest(단위 + MariaDB 통합) · Vitest · Playwright E2E · GitHub Actions |
+| **개발 형태** | 1인 개발 |
+
+<p>
+  <img src="docs/images/career.png" alt="Career 첫 화면: 시작 안내, 진로 탐색, 학습 트랙" width="49%">
+  <img src="docs/images/career-unit.png" alt="Career 단원 화면: 기술 링크, 읽기 활동" width="49%">
+</p>
+
+<sub>저장소의 실제 학습 콘텐츠(`backend/content/python`)를 로컬에서 실행한 화면입니다. Home·News·Dev는 국내 소스 이용 조건이 확정되지 않아 아직 실데이터가 없으므로 화면을 싣지 않았습니다(아래 "현재 개발 상태").</sub>
 
 ---
 
-## 🚧 DevHub 2.0 개발 환경 (진행 중)
+## 왜 만들었나
 
-DevHub 2.0은 새 백엔드(`backend/app/`)와 새 MariaDB 스키마로 재구축 중입니다. 학교 파이널 프로젝트의 마지막 상태는 `legacy-final-project` 태그로 보존합니다. 아래 소개(1장 이후)는 기존 버전 기준입니다.
+개발자는 기술 소식(뉴스), 실무 경험(기업 기술 블로그), 학습(강의·문서)을 각기 다른 곳에서 찾습니다. DevHub는 이 세 가지를 **기술 태그로 연결**해, 뉴스에서 본 기술을 Dev 글과 Career 학습 단원으로 바로 이어 볼 수 있게 하는 것을 목표로 합니다.
 
-| 구분 | 버전 |
+1.0에서 이 목표를 빠르게 구현하면서 드러난 문제가 2.0의 출발점입니다.
+
+- 웹 요청 처리 중에 외부 검색·크롤링·LLM 호출이 함께 일어나 응답이 외부 사이트 상태에 묶여 있었습니다.
+- 브라우저 자동화(Selenium)와 HTML 스크래핑, 자동화 탐지 회피 코드에 의존했습니다.
+- 수집 콘텐츠의 이용 조건을 따로 확인하지 않았습니다.
+
+2.0은 **웹 앱은 DB만 읽고, 수집과 AI는 별도 작업으로, 외부 콘텐츠는 이용 조건이 확인된 범위에서만** 쓰는 구조로 다시 설계했습니다.
+
+## 핵심 기능
+
+| 화면 | 기능 |
 | :--- | :--- |
-| Python | 3.12 (`backend/.python-version`), 의존성 관리: [uv](https://docs.astral.sh/uv/) |
-| Node.js | 24 LTS (`.nvmrc`) |
-| MariaDB | 11.4.13 LTS (Docker Compose) |
+| **Home** (`/`) | 최신 IT 뉴스 3건 + 최신 개발 아티클 3건을 나란히 보여 주고, News·Dev·Career로 이동하는 진입점 |
+| **News** (`/news`) | 국내 IT 뉴스 목록, 기술 필터(주소에 `?tech=` 유지), 더 보기, 최근 7일 기술 언급량 차트, 마지막 수집 시각·지연 표시. 여러 매체가 같은 기사(정규화 URL이 같은 글)를 실으면 한 건으로 묶어 표시 |
+| **Dev** (`/dev`) | 국내 기업 기술 블로그·개발 커뮤니티를 채널별 게시판으로 표시(제목·출처·게시일·원문 링크). 이용 조건이 확인된 소스의 AI 요약 글이 있을 때만 상단에 최대 2건 강조, 없으면 영역을 숨김 |
+| **Career** (`/career`) | 파일(YAML)로 관리하는 학습 트랙·단원·퀴즈, 단원 완료 XP·레벨, 진로(직무) 탐색, 학습 목표, 기술 단위로 News·Dev와 상호 연결 |
+| **계정·설정** | 회원가입·로그인(JWT access token + httpOnly refresh 쿠키), 학습자 유형(선택), 개인화 설정(기본 꺼짐), 관심 기술·역량 자기 평가 |
 
-### 1) MariaDB 실행
+- 게스트도 Home·News·Dev·Career 공개 콘텐츠를 모두 볼 수 있습니다. 개인화 데이터는 공개 응답에 영향을 주지 않습니다(테스트로 고정).
+- 개인화 추천(P5)과 News→Dev 연관 글 추천은 데이터 부족으로 **구현하지 않았습니다**(News→Dev는 검토 결과 NO-GO로 보류).
 
-```bash
-docker compose up -d --wait mariadb
+## 기술 스택과 선택 이유
+
+| 영역 | 선택 | 이유 |
+| :--- | :--- | :--- |
+| API | FastAPI, Pydantic v2 | 요청·응답 스키마를 코드로 고정하고 문서(`/api/docs`)를 자동 생성 |
+| ORM·스키마 | SQLAlchemy 2, Alembic | 스키마 변경을 마이그레이션(현재 0001~0011)으로만 관리. CI에서 `alembic check`로 모델과 마이그레이션 불일치를 차단 |
+| DB | MariaDB 11.4 (Docker Compose) | 개발·테스트 DB와 계정을 분리해, 테스트가 개발 데이터를 건드릴 수 없게 함 |
+| 수집 | httpx, feedparser | 공식 RSS/API만 사용. 브라우저 자동화 없이 타임아웃·크기 제한·리다이렉트 검사를 직접 통제 |
+| 동시 실행 제어 | MariaDB `GET_LOCK`, `flock` | 같은 소스·같은 수집 그룹이 겹쳐 실행되지 않게 함(별도 큐·브로커 없이) |
+| 정기 실행 | cron (생성 명령 제공) | 상시 실행 스케줄러 프로세스 없이 운영 서버의 cron이 수집 명령을 호출 |
+| AI 요약 | Google Gemini (`google-genai`) | 요약을 JSON 스키마로 검증하고, 호출 상한·실패 분류를 기존 요약 엔진에 맞춤 |
+| 인증 | argon2id, JWT(HS256), httpOnly 쿠키 | 비밀번호 해시와 짧은 access token, refresh token은 쿠키로만 전달 |
+| 프론트 | React 19, Vite 7, Tailwind CSS 3 | 개발 서버 프록시로 API와 같은 출처를 유지(refresh 쿠키 동작) |
+| 테스트 | pytest, Vitest, Playwright | 단위·DB 통합·브라우저 E2E를 CI에서 모두 실행 |
+| 의존성 | uv (`uv.lock`), npm (`package-lock.json`) | CI와 로컬이 같은 잠금 파일로 설치 |
+
+## 시스템 구조와 수집 파이프라인
+
+```mermaid
+flowchart LR
+  B["브라우저<br/>React SPA"] -- "/api (Vite proxy)" --> API["FastAPI<br/>app.main:create_app"]
+  API --> SVC["services<br/>content_feed · learning · careers · personalization"]
+  SVC --> DB[("MariaDB<br/>Alembic 0001–0011")]
+  Y["content/*.yaml<br/>기술·소스·트랙"] -- "python -m app.content_loader" --> DB
+  CRON["cron<br/>(운영 서버, 미설치)"] -.-> JOB
+  subgraph JOB_P["별도 프로세스"]
+    JOB["python -m app.jobs<br/>collect · collect-report · crontab · summarize"]
+  end
+  JOB --> F["HttpFetcher<br/>주소·리다이렉트 검사, 크기 제한, 재시도"]
+  F --> RSS[("국내 RSS 피드")]
+  JOB --> DB
+  JOB -. "허용 소스만, 수동 실행" .-> G["Gemini API"]
 ```
 
-- `127.0.0.1:3307`에 개발 DB `devhub_dev`와 테스트 DB `devhub_test`가 계정이 분리된 상태로 생성됩니다. 테스트 계정은 개발 DB에 접근할 수 없습니다.
-- 초기화 스크립트(`docker/mariadb/init/`)는 데이터 볼륨이 처음 만들어질 때 한 번만 실행됩니다.
-- 기본 비밀번호는 로컬 전용입니다. 바꾸려면 루트의 `.env.example`을 `.env`로 복사해 수정하세요.
-- `docker compose down -v`는 로컬 DB 데이터를 삭제하므로 주의하세요.
+웹 앱은 외부 사이트와 LLM을 호출하지 않습니다. 이 경계는 소스 코드의 import 관계를 검사하는 테스트(`tests/unit/test_summary_boundaries.py`)로 고정되어 있습니다.
 
-### 2) 백엔드
+<details>
+<summary><b>수집 한 번의 처리 흐름 (시퀀스)</b></summary>
 
-```bash
+```mermaid
+sequenceDiagram
+  participant C as cron 또는 사용자
+  participant J as app.jobs collect
+  participant L as MariaDB GET_LOCK
+  participant F as HttpFetcher
+  participant A as RSS adapter
+  participant S as store_items
+  participant DB as MariaDB
+  C->>J: collect --group dev (또는 --source slug)
+  J->>J: collect-schedule.yaml 허용 목록 확인
+  loop 소스마다 (한 소스의 실패는 기록하고 다음 소스로)
+    J->>L: GET_LOCK(source, 대기 0초)
+    alt 이미 실행 중
+      J->>DB: job_runs = skipped
+    else 잠금 획득
+      J->>DB: job_runs = running
+      J->>F: get(feed_url)
+      F-->>J: 응답 본문 (크기 제한 이내)
+      J->>A: 파싱, 항목별 제목·URL·날짜 검증
+      A-->>J: 항목 + 건너뛴 사유
+      J->>S: URL 정규화 → url_hash
+      S->>DB: 신규는 INSERT, 기존은 바뀐 필드만 UPDATE, 기술 태그
+      J->>DB: job_runs = succeeded / failed (+ 건수)
+    end
+  end
+```
+
+- 같은 소스 안에서 `(source_id, url_hash)`가 UNIQUE라 다시 수집해도 행이 늘지 않습니다.
+- `--dry-run`은 가져오기·파싱만 하고 `job_runs`도 기록하지 않습니다.
+- 정기 수집(`--group`)은 Gemini를 호출하지 않습니다. AI 요약은 `summarize` 명령을 따로, 호출 상한(`--max-calls`)과 함께 실행합니다.
+
+</details>
+
+## 문제 해결 사례
+
+실제로 겪은 일과 예방 차원의 설계를 구분해 적었습니다. 성능 수치는 측정하지 않아 싣지 않았습니다.
+
+<details open>
+<summary><b>1. 같은 글이 반복 수집될 때 중복 저장 방지</b> (예방 설계 → 실데이터로 검증)</summary>
+
+- **문제**: RSS는 매번 최근 N건을 다시 내려주고, 같은 기사가 `utm_*` 같은 추적 파라미터만 바뀐 URL로 들어오기도 합니다.
+- **판단**: 중복 판단을 애플리케이션 조건문이 아니라 DB 제약으로 보장합니다. 여러 매체에 같은 기사가 실리는 경우는 매체별 지표를 잃지 않도록 저장은 따로, 표시만 묶습니다.
+- **대응**: URL을 정규화(호스트 소문자, 추적 파라미터·`#` 제거)한 해시로 `(source_id, url_hash)` UNIQUE 제약. 이미 있는 글은 바뀐 필드만 갱신. Home·News 목록은 같은 해시를 한 건으로 묶어 대표 글을 결정적으로 선택.
+- **검증**: 개발 DB에서 같은 피드를 다시 수집했을 때 신규 0건(뉴스 20건·블로그 10건 각각). `test_collect_urls.py`, `test_news_dedupe.py`, `test_collector.py`.
+- **한계(미해결)**: URL이 다른 같은 내용(슬러그 변경, 다른 매체의 같은 보도)은 묶지 못합니다.
+
+</details>
+
+<details>
+<summary><b>2. 수집 실패 원인 분리: 네트워크 제한·주소 변경·사이트 차단</b> (실제 장애)</summary>
+
+- **문제**: 클라우드 개발 환경에서 등록 소스 27곳 중 다수가 수집에 실패했습니다.
+- **원인 분리**: 수집기와 프록시 기록으로 실패 유형을 나눴습니다.
+  - 실행 환경의 네트워크 허용 목록 밖 → 연결 단계 거부(사이트에 도달하지 않음)
+  - RSS 주소 이전 → 404 (ITWorld Korea, ZDNet Korea)
+  - 사이트 보안 정책 → Cloudflare 403 (우아한형제들 기술 블로그)
+- **판단**: 차단을 브라우저 위장 등으로 우회하지 않고, 원인별로 다르게 대응합니다.
+- **대응**: 홈페이지가 안내하는 새 피드 주소로 갱신, 자동 접근을 막는 소스는 `paused`, 네트워크 제한 소스는 다른 실행 환경에서 재검증하도록 분리.
+- **검증**: 새 주소로 실제 파싱 성공(ITWorld 20건, ZDNet 30건, dry-run).
+- **추가 확인**: 이후 ITWorld의 robots.txt가 모든 크롤러에 `/feed/` 경로를 금지하는 것을 확인해, 파싱은 되지만 소스를 `paused`로 바꿔 전체·정기 수집에서 제외했습니다(테스트로 고정).
+- **미해결**: 클라우드에서 막힌 국내 소스 9곳은 아직 검증 전입니다([로컬 검증 절차](docs/DEVELOPMENT.md#6-rss-접속파싱-테스트)).
+
+</details>
+
+<details>
+<summary><b>3. 이용 조건을 기준으로 한 수집 정책과 국내 중심 전환</b> (정책 변경)</summary>
+
+- **문제**: 기술적으로 수집할 수 있다는 것과 화면에 다시 보여 줘도 된다는 것은 다른 문제였습니다.
+  - 해외 매체의 RSS 약관은 "수정 없이 표시"만 허용하고 번역·2차 저작물을 금지했습니다.
+  - 일부 국내 매체는 robots.txt로 피드 경로와 AI 봇을 막고 있었습니다.
+- **판단**: RSS 공개, robots.txt 허용, 접속 성공을 이용 허락으로 보지 않습니다.
+- **대응**:
+  - 정기 수집은 `content/collect-schedule.yaml`의 **명시적 허용 목록**에 있는 소스만 실행(현재 News 0곳, Dev 0곳).
+  - AI 요약은 소스별 검토 스위치(`ai_summary`)가 켜진 소스에만, 페이지 단위 라이선스 확인을 거쳐 실행.
+  - 해외 소스와 영→한 번역 기능을 제거하고 국내 한국어 소스만 남김. 번역 테이블은 마이그레이션을 피하려고 미사용 상태로 유지.
+- **검증**: 번역 코드가 다시 들어오지 않도록 하는 테스트, 저장소 소스가 국내 한국어 RSS뿐인지 확인하는 테스트.
+- **미해결**: 국내 소스의 재표시 허락은 아직 확정되지 않았습니다.
+
+</details>
+
+<details>
+<summary><b>4. 외부 주소 요청의 안전장치</b> (예방 설계)</summary>
+
+- 모든 요청 주소와 리다이렉트 대상을 검사합니다: http(s)만, 사용자 정보가 든 주소·localhost·사설 IP(레거시 IPv4 표기 포함) 거부, https→http 전환 거부, 쿠키 미저장, 응답 크기 상한, 429/5xx만 제한적으로 재시도.
+- 기사 본문을 가져오는 경로는 허용한 호스트에만 연결하도록 잠그고, 프록시를 거치지 않을 때는 DNS 결과가 공인 IP인지도 확인합니다.
+- **미해결**: DNS 확인 결과와 실제 연결 IP를 고정하지 않습니다(공개 서비스 전 재검토 대상).
+
+</details>
+
+<details>
+<summary><b>5. 개발 DB 백업과 선택적 초기화</b> (운영 절차)</summary>
+
+- **상황**: 국내 중심 전환 후 해외 콘텐츠 30건과 그에 딸린 요약·번역·태그를 지워야 했지만, 계정·학습 기록은 그대로 두어야 했습니다.
+- **대응**: `mariadb-dump` 백업 → 임시 DB에 복원해 전 테이블 행 수·체크섬 비교 → 외래키를 확인하고 사용 종료(retired) 소스의 콘텐츠 행만 한 트랜잭션에서 삭제. `DROP DATABASE`·`TRUNCATE`는 쓰지 않았습니다.
+- **검증**: 삭제 후 콘텐츠 관련 테이블만 바뀌고 나머지 24개 테이블은 체크섬까지 동일.
+
+</details>
+
+## 로컬 실행 요약
+
+Windows 기준 상세 절차와 오류 해결은 **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** 에 있습니다. 명령은 저장소 설정 파일과 CLI 코드에서 확인한 것이며, **Windows PC에서의 실제 실행은 아직 검증하지 않았습니다**(Linux 환경에서 같은 명령의 동작만 확인).
+
+```powershell
+# 0) 필요 도구: Git, uv(Python 3.12 자동 설치), Node.js 24, Docker Desktop
+# 1) DB (저장소 루트)
+Copy-Item .env.example .env
+docker compose up -d --wait mariadb          # 127.0.0.1:3307, devhub_dev / devhub_test
+
+# 2) 백엔드
 cd backend
-cp .env.example .env          # 이미 .env가 있다면 DATABASE_URL, TEST_DATABASE_URL, JWT_SECRET 줄만 추가
+Copy-Item .env.example .env
 uv sync
-uv run alembic upgrade head   # 스키마는 Alembic으로만 관리합니다
-uv run uvicorn app.main:create_app --factory --reload
-```
+uv run alembic upgrade head
+uv run python -m app.content_loader technologies content/technologies.yaml
+uv run python -m app.content_loader sources content/sources.yaml
+uv run python -m app.content_loader load content/python
+uv run uvicorn app.main:create_app --factory --reload     # http://127.0.0.1:8000/api/docs
 
-- 헬스체크: `GET http://127.0.0.1:8000/api/health` (프로세스), `GET /api/health/ready` (DB 연결)
-- API 문서(로컬만): `http://127.0.0.1:8000/api/docs`
-- 기존 백엔드(`backend/main.py`)는 별도 실행 경로이며 새 앱과 섞이지 않습니다.
-- 인증 API: `POST /api/auth/register`, `/login`, `/refresh`, `/logout`, `GET /api/me`. access token은 응답 본문(브라우저 메모리), refresh token은 httpOnly 쿠키(`/api/auth` 경로 전용)로 전달됩니다.
-- 학습자 유형(선택): 가입 시 `learner_type`(`beginner`/`developer`/`exploring`)을 보낼 수 있고, `PATCH /api/me/settings`로 바꾸거나 `null`로 지울 수 있습니다. 권한 필드 `users.role`과는 별개이며, Career 첫 화면의 정적 시작 안내에만 쓰입니다. 콘텐츠 순서·추천·접근 권한에는 영향이 없습니다.
-- 가입 횟수 제한: IP당 1시간 5회(`REGISTER_RATE_LIMIT_ATTEMPTS`, `REGISTER_RATE_LIMIT_WINDOW_SECONDS`). 로그인 실패 제한과 같이 프로세스 메모리에 기록하므로, 워커가 여러 개면 워커마다 따로 세고 재시작하면 초기화됩니다. 학교·회사·통신사 NAT처럼 여러 사람이 한 IP를 쓰면 한도를 함께 씁니다. 리버스 프록시 뒤에서는 실제 클라이언트 IP 설정이 필요합니다. 여러 서버로 늘리기 전에 공유 저장소 기반으로 바꿔야 합니다.
-
-### 학습 콘텐츠
-
-학습 트랙은 `backend/content/<트랙>/`에 파일로 관리합니다. `track.yaml`에 트랙 정보를, `units/`에 단원마다 파일 하나를 둡니다. 새 트랙을 추가할 때 코드는 바꾸지 않습니다.
-
-```bash
-cd backend
-uv run python -m app.content_loader technologies content/technologies.yaml   # 먼저: 단원이 기술을 참조합니다
-uv run python -m app.content_loader load content/python --dry-run   # 바뀔 내용만 확인
-uv run python -m app.content_loader load content/python             # DB에 반영
-```
-
-반영 순서: **기술 분류(`technologies`) → 수집 소스(`sources`) → 직무(`careers`) → 트랙(`load`)**
-
-- 같은 파일을 여러 번 반영해도 결과가 같습니다. 파일에서 지운 단원·활동은 삭제되지 않고 `retired`(비공개) 처리됩니다.
-- 형식 오류(중복 slug·순서, 필수 항목 누락, http(s)가 아닌 링크, 렌더링되지 않는 굵게 표시 등)가 있으면 아무것도 반영하지 않습니다.
-- 이미지·동영상은 저장소에 넣지 않고 외부 링크로 연결합니다.
-- 단원 파일의 `technologies: [python]`에 그 단원이 다루는 기술(`content/technologies.yaml`의 slug)을 적을 수 있습니다(선택, 최대 10개). 없는 기술이나 `retired` 기술을 적으면 트랙 전체를 반영하지 않습니다. 다시 반영하면 파일 내용으로 연결이 맞춰집니다.
-- 트랙 slug로 `explore`, `roles`, `goals`는 쓸 수 없습니다(Career 진로 화면 경로와 겹침).
-- 단원 파일의 `quiz:`에 문항과 정답·해설을 적습니다(문항 1~30개, 기본 통과 기준 80%). 퀴즈가 없는 단원은 완료할 수 없습니다. 이미 응시 기록이 있는 퀴즈를 고치면 새 버전이 만들어지고, 이미 완료한 단원은 완료 상태가 유지됩니다.
-
-### 학습 진행·보상 규칙
-
-- 단원 완료 = 필수 활동을 모두 "학습 완료로 표시" + 단원 퀴즈 통과(순서 무관). 완료는 취소되지 않습니다.
-- XP는 단원 완료 때만 100 XP 지급되며, 같은 단원으로 두 번 받지 않습니다. 레벨은 XP 합계로 계산합니다(1→2레벨 100 XP, 이후 레벨마다 필요 XP +50). 값은 `XP_PER_UNIT_COMPLETION`, `LEVEL_BASE_XP`, `LEVEL_STEP_XP`로 바꿀 수 있습니다.
-- 퀴즈 재도전은 무제한이며, 통과 전에는 점수와 틀린 문항 번호만, 통과 후에는 정답과 해설을 보여줍니다. 채점은 서버에서 하고 정답은 공개 API에 포함되지 않습니다.
-- 개인 진행 API는 `/api/me/...` 아래에 있고 로그인한 사용자 자신의 기록만 다룹니다.
-
-### 진로 탐색·학습 목표 (P3)
-
-```bash
-cd backend
-uv run python -m app.content_loader careers content/careers.yaml --dry-run   # 기술 분류를 먼저 반영
-```
-
-- 직무는 `content/careers.yaml`에 파일로 관리합니다(설명·대표 업무·핵심/관련 기술·근거 링크 1개 이상). 파일에서 빠진 직무는 `retired` 처리되고, 사용자가 저장한 후보·목표는 그대로 남습니다.
-  - **이 파일은 아직 없습니다.** 초기 직무 6개 초안은 근거 대조 전(UNVERIFIED)이라 `docs/devhub-2.0/review/careers/`에서 검토 중이며, 서비스 데이터로 반영하지 않았습니다. 테스트와 E2E는 별도 테스트 데이터를 씁니다.
-- 공개 API(로그인 불필요, 읽기 전용, 누구에게나 같은 응답): `GET /api/careers/roles`, `GET /api/careers/roles/{slug}`(기술별 공개 단원 포함).
-- 진로 후보(로그인 필요, 최대 10개): `GET /api/me/career-candidates`, `PUT|DELETE /api/me/career-candidates/{role_slug}`.
-- 학습 목표(로그인 필요, 진행 중 최대 5개): `GET|POST /api/me/goals`, `PATCH|DELETE /api/me/goals/{id}`. 대상은 직무·기술·트랙 중 하나 또는 없음.
-- 정책:
-  - 학습 목표는 Career 성장 데이터입니다. 개인화 설정과 상관없이 저장되고, 연결된 학습과 내 진행 상태를 보여 줍니다(추천이 아니라 고른 대상의 고정 목록).
-  - 진로 탐색은 목표를 만들거나 바꾸지 않습니다. "학습 목표로 추가"는 양식만 열고, 저장은 사용자가 합니다.
-  - 후보·목표 저장은 개인화 설정·학습 진행·XP를 바꾸지 않습니다. 목표 달성은 사용자가 직접 표시하고 XP는 없습니다.
-  - 달성(`achieved`)에서 다른 상태로 바꾸면 달성 시각이 지워지고, 다시 달성하면 새 시각이 기록됩니다. 보관과 삭제는 별개입니다.
-
-### 개인화 설정 (P4)
-
-- 개인화는 기본 꺼짐입니다. 설정 화면에서 사용자가 직접 켜고 끕니다(`PATCH /api/me/settings`의 `personalization_enabled`, 참/거짓만 허용).
-- 관심 기술(최대 20개)과 역량 자기 평가(기술별 `learning`·`used`·`confident`, 최대 30개)는 켜짐·꺼짐과 상관없이 조회·편집할 수 있습니다. 역량은 사용자가 스스로 평가한 값이며 검증된 숙련도가 아닙니다.
-  - `GET /api/me/personalization`, `PUT /api/me/personalization/interests`, `PUT /api/me/personalization/skills`(둘 다 전체 교체·멱등. 잘못된 요청은 아무것도 바꾸지 않음)
-  - 기술 목록: `GET /api/technologies`(공개, 분야·언어·프레임워크 등 종류별)
-- 꺼짐: 데이터는 보관하지만 추천에 쓰지 않습니다. 켜짐 + 데이터 없음: 추천 프로필이 비어 있습니다. 현재는 개인화 추천 기능이 없습니다(P5).
-- 초기화(`POST /api/me/personalization/reset`): 관심 기술과 역량 자기 평가만 삭제합니다. 켜짐·꺼짐 상태, 학습 목표, 진로 후보, 학습 진행률, XP, 학습자 유형은 유지됩니다.
-- 관심·역량은 `services/personalization.py`만 읽고 씁니다. Home·Dev·Career 공개 응답은 게스트·꺼짐·켜짐 사용자 모두 같습니다(테스트로 고정).
-
-### Home·Dev 콘텐츠 수집
-
-Home(IT 뉴스)과 Dev(개발자 글·질문)는 수집 작업이 DB에 저장한 내용을 보여 줍니다. 웹 서버는 외부 사이트를 호출하지 않고, 수집은 별도 명령으로만 실행합니다.
-
-```bash
-cd backend
-uv run python -m app.content_loader technologies content/technologies.yaml   # 기술 분류
-uv run python -m app.content_loader sources content/sources.yaml             # 수집 소스
-uv run python -m app.jobs collect --dry-run          # 가져오기만 해 보고 저장하지 않음
-uv run python -m app.jobs collect                    # 모든 활성 소스 수집
-uv run python -m app.jobs collect --source devto     # 특정 소스만
-```
-
-- 소스: IT 뉴스 RSS, DEV Community·Hacker News·Stack Overflow(공식 API), GeekNews·국내 기업 기술블로그(RSS). 크롤링·브라우저 자동화는 쓰지 않습니다.
-- 본문은 저장하지 않고 제목·짧은 설명·링크·작성자·날짜·소스가 주는 지표(반응·점수·댓글·조회)만 저장합니다. 지표가 없는 소스는 0이 아니라 "없음"으로 저장됩니다.
-- 같은 글은 다시 수집해도 한 번만 저장되고 지표만 갱신됩니다. 같은 소스를 동시에 두 번 실행하면 하나는 `skipped`로 기록됩니다.
-- 실행 결과는 `job_runs`에 남고, 화면의 "마지막 갱신"과 지연 표시는 여기서 계산합니다. 한 소스가 실패해도 다른 소스는 계속 수집됩니다.
-- 기술 태그는 `content/technologies.yaml`의 별칭으로 붙습니다(단어 단위 일치라 "java"가 "javascript"에 붙지 않음).
-- 여러 매체가 같은 기사(정규화한 URL이 같은 글)를 실으면 소스마다 한 번씩 저장되고, **Home 목록과 언급량에서만** 하나로 묶습니다. 대표 글은 발행 시각이 있는 글 중 발행 시각이 가장 이른 것(묶인 글 모두 발행 시각이 없으면 수집 시각이 가장 이른 것, 같으면 소스 순서·id 순)이며, 화면의 제목·매체·날짜는 모두 대표 글의 것입니다. 기술 필터는 묶인 글 전체의 태그를 함께 보지만, 이는 태그 일치일 뿐 기사와 기술의 관련성을 검증한 것은 아닙니다. Dev는 묶지 않습니다.
-- `GET /api/technologies/{slug}/units`: 그 기술을 다루는 공개 Career 단원 목록. Home·Dev에서 사용자가 기술 필터를 고르면 "관련 학습"으로, 단원 화면에서는 그 기술의 IT 뉴스·Dev 글 링크로 연결합니다(기술 단위 연결이며 개별 기사와 단원의 관련성을 뜻하지 않음).
-- Stack Exchange 무료 키가 있으면 `STACKEXCHANGE_KEY`에 넣으세요(하루 호출 한도 300 → 10,000). 없어도 동작합니다.
-- 수집 전용 라이브러리는 `jobs` 의존성 그룹에 있습니다(웹 전용 설치: `uv sync --no-group jobs`).
-
-### 3) 테스트
-
-```bash
-cd backend
-uv run pytest                        # 단위 + MariaDB 통합 테스트 (TEST_DATABASE_URL 필요)
-uv run pytest -m "not integration"   # DB 없이 단위 테스트만
-uv run ruff check && uv run ruff format --check
-```
-
-통합 테스트는 실제 연결된 DB 이름이 `*_test`인지 확인한 뒤에만 실행되며, `TEST_DATABASE_URL`이 없으면 건너뛰지 않고 실패합니다.
-
-E2E 테스트(Playwright)는 실제 브라우저로 회원가입 → 단원 학습 → 퀴즈 재도전·통과 → XP 확인 → 새로고침·재로그인 흐름과 Home·Dev 화면을 검사합니다. 테스트 DB(`devhub_test`)에 마이그레이션과 콘텐츠, 저장된 샘플 응답으로 만든 Home·Dev 데이터(외부 사이트 접속 없음)를 반영한 뒤 API(8100)와 Vite(5180)를 직접 띄웁니다. 백엔드 pytest와 동시에 실행하지 마세요.
-
-```bash
-cd frontend && npm ci && cd ../e2e
-npm ci
-npx playwright install chromium   # 처음 한 번
-npx playwright test
-```
-
-### 4) 프론트엔드
-
-```bash
+# 3) 프론트엔드 (새 터미널)
 cd frontend
 npm ci
-npm run dev       # /api 요청은 Vite proxy로 새 백엔드(127.0.0.1:8000)에 전달
-npm test          # Vitest
-npm run build
+npm run dev                                   # http://localhost:5173
 ```
 
-새 API 호출은 `src/api/client.js`를 사용합니다. 로그인 상태는 `src/auth/AuthProvider.jsx`가 관리하며, 토큰을 localStorage에 저장하지 않습니다. 브라우저는 반드시 Vite 개발 서버(`http://localhost:5173`)로 접속해야 refresh 쿠키가 같은 출처로 동작합니다.
+수집은 웹 서버와 별개입니다. `uv run python -m app.jobs collect --source <slug> --dry-run`은 **저장하지 않고** 접속·파싱만 확인합니다. 이용 조건이 확인되지 않은 소스는 저장 수집을 하지 마세요.
 
-Home·Dev·Career 화면은 모두 새 백엔드를 사용합니다. 옛 화면 파일(`pages/Home.jsx`, `pages/DevDashboard.jsx`, `pages/CareerDashboard.jsx`)과 옛 API 모듈은 더 이상 라우팅되지 않으며, 정리 단계에서 제거할 예정입니다.
+## 테스트와 현재 개발 상태
 
----
-
-## 1. 📅 프로젝트 개요 (Overview)
-
-| 항목 | 내용 |
+| 구분 | 결과 (2026-11-03, `main` 기준) |
 | :--- | :--- |
-| **프로젝트명** | DevHub (IT Trend Fusion Server) |
-| **개발 기간** | 2025.10 ~ 2025.12 |
-| **개발 인원** | 1명 (Full Stack) |
-| **핵심 의도** | 개발자의 커리어 단계에 맞춰 최적의 학습 경로를 제시하고 개인화된 정보 허브를 구축 |
+| 백엔드 | pytest 670개 통과 (단위 + MariaDB 통합), ruff, `alembic check` |
+| 프론트엔드 | Vitest 90개 통과, ESLint(2.0 파일), 빌드 |
+| E2E | Playwright 13개 시나리오 통과 (학습 완료·XP, 진로·목표, 개인화 설정, Home→News/Dev/Career 이동, News 직접 접속·새로고침, Dev 채널·정렬, 모바일 폭) |
+| CI | GitHub Actions 4개 job: Backend · Frontend · E2E · Secret scan |
 
----
+**완료(코드·테스트로 확인)**
 
-## 2. 🛠️ 기술 스택 (Tech Stack)
+- Home·News·Dev·Career 화면과 공개 API, 인증, 학습 진행·퀴즈·XP, 진로 탐색·학습 목표, 개인화 설정
+- RSS/API 수집기(중복 방지, 오류 격리, 동시 실행 잠금, 수집 기록), 정기 수집 그룹·cron 줄 생성(재설치 시 중복 방지), 수집 통계 리포트
+- Gemini 요약 엔진(JSON 스키마 검증, 호출 상한, 실패 분류, 결과 재사용). 실제 Gemini 호출로 요약 생성·저장·표시를 검증한 것은 **과거 PoC**(합성 기사와 당시 소스 1건)이며, 지금은 요약이 허용된 국내 소스가 없어 어떤 콘텐츠에도 자동 적용되지 않습니다
 
-| 구분 | 기술 스택 | 선정 이유 |
-| :---: | :--- | :--- |
-| **Frontend** | ![](https://img.shields.io/badge/React-18-blue?logo=react&logoColor=white) ![](https://img.shields.io/badge/Vite-5-purple?logo=vite&logoColor=white) ![](https://img_shields.io/badge/Tailwind-3-cyan?logo=tailwindcss&logoColor=white) ![](https://img.shields.io/badge/Recharts-2.12-orange) | SPA의 빠른 렌더링, 로드맵/능력치 차트 시각화에 용이 |
-| **Backend** | ![](https://img.shields.io/badge/FastAPI-0.100-green?logo=fastapi&logoColor=white) ![](https://img.shields.io/badge/Python-3.9-blue?logo=python&logoColor=white) | 비동기 처리(Async)를 통한 성능 확보 및 크롤링/데이터 처리 활용 |
-| **Database** | ![](https://img.shields.io/badge/MariaDB-10.6-brown?logo=mariadb&logoColor=white) ![](https://img.shields.io/badge/SQLAlchemy-2.0-red?logo=sqlalchemy&logoColor=white) | 관계형 데이터의 구조적 저장과 ORM을 통한 유지보수성 향상 |
-| **Core** | **JWT, Passlib** | 토큰 기반의 안전한 인증 시스템 구축 |
+**아직 운영되지 않는 것**
 
----
+- **실제 콘텐츠**: 국내 소스의 이용 조건이 확정되지 않아 자동 수집 허용 소스가 **News 0곳, Dev 0곳**이고, 개발 DB의 Home·News·Dev는 빈 상태입니다.
+- **정기 실행**: cron 구성은 코드로 준비됐지만(`python -m app.jobs crontab`), 운영 서버에 설치하지 않았습니다(배포 없음).
+- **미구현**: 개인화 추천(P5), News→Dev 연관 글(NO-GO 보류), URL이 다른 같은 기사 묶기(현재는 정규화 URL이 같은 경우만 한 건으로 묶음).
 
-## 3. ✨ 핵심 기능 (Key Features)
+## 1.0 → 2.0 주요 변화
 
-### 3.1. 🎯 Personalized Career Roadmap (맞춤형 로드맵)
-| 기능 | 설명 |
+| | DevHub 1.0 | DevHub 2.0 |
+| :--- | :--- | :--- |
+| 백엔드 구조 | 라우터에서 외부 검색·크롤링·LLM 호출 | 웹 앱은 DB만 읽음. 수집·AI는 별도 CLI 작업 |
+| 콘텐츠 확보 | Naver·Google 검색, HTML 스크래핑(BeautifulSoup), Selenium(자동화 탐지 회피 포함) | 공식 RSS/API만. 주소·리다이렉트·크기 검사. 브라우저 자동화 없음 |
+| 스케줄링 | 웹 프로세스 안의 APScheduler | 운영 서버 cron + 그룹별 잠금, 명시적 허용 목록 |
+| 중복 처리 | 애플리케이션 로직 | DB UNIQUE 제약 + URL 정규화, 표시 단계 묶음 |
+| AI | 수집 시 항상 요약(OpenAI) | 이용 조건이 확인된 소스만, 수동 실행·호출 상한·스키마 검증(Gemini) |
+| 스키마 | `Base.metadata.create_all`로 생성 (마이그레이션 없음) | Alembic 마이그레이션 + CI 불일치 검사 |
+| 테스트 | 자동화 테스트 없음 | pytest·Vitest·Playwright, CI 4개 job |
+| 학습 기능 | 로드맵 화면 | 파일 기반 트랙·단원·퀴즈, XP·레벨, 진로·목표 |
+
+1.0의 최종 상태는 `legacy-final-project` 태그로 보존되어 있습니다. 저장소의 `backend/main.py`, `backend/scheduler.py`, `backend/services/` 등은 1.0 코드이며 2.0 앱(`backend/app/`)에서 불러오지 않습니다(테스트로 고정).
+
+## 문서
+
+| 문서 | 내용 |
 | :--- | :--- |
-| **FE/BE 필터링** | 사용자의 관심사를 기반으로 로드맵을 자동으로 **가지치기(Filtering)**하여 보여줍니다. |
-| **Gamification** | **Hexagon Radar Chart**를 통해 스탯을 시각화하고, **미니 퀴즈** 결과에 따라 스탯이 실시간 업데이트됩니다. |
-| **UX Flow** | 비로그인 유저는 **AI 진단 후 Personal 맵을 체험판**으로 경험하도록 유도합니다. |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Windows 로컬 실행, 콘텐츠 반영, 수집 dry-run·저장, 테스트, 오류 해결 |
+| [docs/devhub-2.0/](docs/devhub-2.0/README.md) | 설계·검토 기록 (작성 시점 기준) |
+| [E0 소스 이용 조건 검토](docs/devhub-2.0/DevHub-2.0-E0-Source-Terms-Review.md) | 해외·국내 소스 약관·robots.txt 검토 |
+| [1.0·2.0 수집 구조 비교](docs/devhub-2.0/DevHub-2.0-News-Collection-Architecture-Comparison.md) | 1.0 수집 방식과 2.0 재설계 근거 |
+| [P5-0 수집·콘텐츠 검토](docs/devhub-2.0/DevHub-2.0-P5-0-Collection-and-Content-Review.md) | 수집 데이터로 추천이 가능한지에 대한 검토 |
 
-### 3.2. 📰 Dev Trend Fusion
-| 기능 | 설명 |
-| :--- | :--- |
-| **Dev Dashboard** | OKKY, Dev.to 기술 아티클을 수집/분석하여 트렌드 및 이슈를 제공합니다. |
-| **인증 통합** | **JWT 토큰 기반 인증**을 통해 로그인 시 로드맵 필터링 및 대시보드 데이터가 즉시 갱신됩니다. |
-
----
-
-## 4. 💥 트러블 슈팅 및 리팩토링
-
-| Issue | 현상 및 해결 |
-| :--- | :--- |
-| **Legacy 코드 분리** | 기존 크롤링 코드가 메인 브랜치와 혼재. 👉 **Git Branch** 활용, 구 버전을 `legacy-job-crawling`에 **보존**하고 `main`은 로드맵 기능으로 리팩토링. |
-| **데이터 구조 충돌** | 개인화 API와 Public API의 데이터 구조가 달라 프론트엔드 충돌. 👉 **Backend**에서 개인화 API도 Source별로 분류하여 **구조 통일** 및 **Fallback Logic** 구현. |
-| **JWT ID 획득 오류** | 프론트엔드에서 유저 ID 획득에 타입 에러 발생. 👉 **Backend**의 토큰 생성 로직에 **`id` 필드를 페이로드에 포함**하여 토큰 디코딩만으로 ID 즉시 획득하도록 개선. |
-
----
-
-## 5. 🚀 설치 및 실행 (Getting Started)
-
-### Prerequisites
-
-* Docker & Docker Compose
-* `requirements.txt` 및 `package.json` 최신화 완료 (Git에 반영됨)
-
-### 실행 명령어
-
-```bash
-# 1. Repository Clone
-git clone [https://github.com/jinhansol/IT-Trend-Fusionb-server.git](https://github.com/jinhansol/IT-Trend-Fusionb-server.git)
-
-# 2. Environment Setup
-# 프로젝트 폴더로 이동 후 backend/.env 파일을 생성하고 DB 정보를 입력하세요.
-
-# 3. Docker Run (Build & Start)
-# DB 호스트명 자동 매핑 및 환경변수 설정을 위해 docker-compose 사용
-docker-compose up --build -d
-
-# 접속 정보	URL
-Frontend	http://localhost:5173
-Backend API Docs	http://localhost:8000/docs
-```
-
-## 6. 📝 회고 (Retrospective)
-이번 프로젝트는 단순한 CRUD를 넘어 **"데이터 수집(Crawling) → 가공(Classification) → 개인화(Personalization)"**로 이어지는 데이터 파이프라인 전체를 경험했습니다. **레거시 코드 처리(Git 브랜치 전략)**와 신규 기능 통합(Full-Stack 데이터 플로우) 과정에서 유지보수성과 API 설계의 중요성을 깊이 체감했습니다. 향후 Redis 캐싱을 도입하여 대시보드 로딩 속도를 개선할 계획입니다.
+설계·검토 문서 일부는 해외 소스를 쓰던 시점에 작성되어, 현재의 국내 중심 정책과 다른 내용이 있습니다.
