@@ -23,7 +23,8 @@ sources:
   # --- Home: Korean IT news ----------------------------------------------------------------
   - { slug: zdnet-korea, name: ZDNet Korea, kind: news, adapter: rss, language: ko, site_url: "https://zdnet.co.kr/", feed_url: "https://feeds.feedburner.com/zdkorea" }
   - { slug: etnews, name: 전자신문, kind: news, adapter: rss, language: ko, site_url: "https://www.etnews.com/", feed_url: "https://rss.etnews.com/Section903.xml" }
-  - { slug: itworld-korea, name: ITWorld Korea, kind: news, adapter: rss, language: ko, site_url: "https://www.itworld.co.kr/", feed_url: "https://www.itworld.co.kr/feed/" }
+  # robots.txt disallows /feed/ for every crawler (and AI bots site-wide); not collected.
+  - { slug: itworld-korea, name: ITWorld Korea, kind: news, adapter: rss, language: ko, site_url: "https://www.itworld.co.kr/", feed_url: "https://www.itworld.co.kr/feed/", status: paused }
   - { slug: ciokorea, name: CIO Korea, kind: news, adapter: rss, language: ko, site_url: "https://www.ciokorea.com/", feed_url: "https://www.ciokorea.com/rss/all.xml" }
   - { slug: ddaily, name: 디지털데일리, kind: news, adapter: rss, language: ko, site_url: "https://www.ddaily.co.kr/", feed_url: "https://www.ddaily.co.kr/news/rss/allArticle.xml" }
   - { slug: bloter, name: 블로터, kind: news, adapter: rss, language: ko, site_url: "https://www.bloter.net/", feed_url: "https://www.bloter.net/rss" }
