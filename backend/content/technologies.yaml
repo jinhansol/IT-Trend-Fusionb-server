@@ -2,7 +2,13 @@
 # and the roadmap (Phase 7).
 #
 # aliases      lower-case words matched as whole words in titles, descriptions and tags
-# tag_aliases  matched only against a source's own tags (too common as ordinary words)
+# tag_aliases  matched only against a source's own tags (too common as ordinary words).
+#              A few of them also count in free text in an explicit technical context,
+#              defined in code (app/services/tagging.py CONTEXT_RULES): "react" followed
+#              by a version ("React 19.2"), a development word ("React hooks") or a Korean
+#              particle ("React로").
+# Every alias is unique across the file. A word that only sometimes means a technology
+# (e.g. "container") is not an alias at all.
 # kind: field  broad areas, used for the "분야 비율" chart
 #
 # Load: uv run python -m app.content_loader technologies content/technologies.yaml
@@ -18,6 +24,8 @@ technologies:
     name: 프론트엔드
     kind: field
     aliases: [frontend, front-end, 프론트엔드, 프런트엔드]
+    # css/html stay here: HTML and CSS as technologies of their own is deferred to S3
+    # (an alias belongs to one technology, so moving them would drop this field).
     tag_aliases: [webdev, css, html]
   - slug: backend
     name: 백엔드
@@ -218,7 +226,9 @@ technologies:
   - slug: docker
     name: Docker
     kind: tool
-    aliases: [docker, 도커, container, containers, 컨테이너]
+    # Not "container"/"컨테이너": a sidecar container, a container ship or a Kubernetes
+    # pod is not Docker.
+    aliases: [docker, 도커, dockerfile]
   - slug: kubernetes
     name: Kubernetes
     kind: tool

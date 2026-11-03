@@ -3,12 +3,14 @@ import pytest
 from app.jobs.store import normalize_url
 from app.services.tagging import Tagger
 
-JAVA, JS, AI, PY, GO, CPP, CSHARP, SEC, REACT, K8S = range(1, 11)
+JAVA, JS, AI, PY, GO, CPP, CSHARP, SEC, REACT, K8S, RN = range(1, 12)
 
 TAGGER = Tagger.from_aliases(
     [
         (JAVA, "java", False),
+        (JAVA, "자바", False),
         (JS, "javascript", False),
+        (JS, "자바스크립트", False),
         (JS, "js", True),
         (AI, "ai", False),
         (AI, "인공지능", False),
@@ -24,6 +26,7 @@ TAGGER = Tagger.from_aliases(
         (REACT, "react", True),
         (K8S, "kubernetes", False),
         (K8S, "k8s", False),
+        (RN, "react native", False),
     ]
 )
 
@@ -41,12 +44,39 @@ TAGGER = Tagger.from_aliases(
         ("C++26 features", {CPP}),
         ("Modern C# patterns", {CSHARP}),
         ("정보보안 동향", {SEC}),
-        ("React hooks explained", set()),  # "react" is tag-only (common English verb)
         ("Running K8s at home", {K8S}),
+        ("자바스크립트 비동기 정리", {JS}),  # "자바" must not match inside "자바스크립트"
+        ("자바와 자바스크립트 비교", {JAVA, JS}),
+        ("자바로 서버 만들기", {JAVA}),
     ],
 )
 def test_text_matches_whole_words_only(title, expected):
     assert TAGGER.match(title, None, []) == expected
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        # "react" is tag-only (a common English verb) but counts in a technical context.
+        ("React 19.2 보안 패치", {REACT, SEC}),
+        ("react-18 upgrade notes", {REACT}),
+        ("React v19 released", {REACT}),
+        ("React hooks explained", {REACT}),
+        ("Building React components", {REACT}),
+        ("React 컴포넌트 설계", {REACT}),
+        ("React로 만든 대시보드", {REACT}),
+        ("How people react to price changes", set()),
+        ("Markets react quickly", set()),
+        ("Users react 2025 survey", set()),  # not a version
+        ("React Native 앱 출시", {RN}),  # React Native is its own technology
+    ],
+)
+def test_react_in_free_text_needs_a_technical_context(title, expected):
+    assert TAGGER.match(title, None, []) == expected
+
+
+def test_context_rules_apply_only_when_the_alias_exists():
+    assert Tagger.from_aliases([(PY, "python", False)]).match("React hooks", None, []) == set()
 
 
 def test_source_tags_use_tag_only_aliases_and_ignore_versions():
