@@ -145,7 +145,7 @@ sequenceDiagram
 - **판단**: 차단을 브라우저 위장 등으로 우회하지 않고, 원인별로 다르게 대응합니다.
 - **대응**: 홈페이지가 안내하는 새 피드 주소로 갱신, 자동 접근을 막는 소스는 `paused`, 네트워크 제한 소스는 다른 실행 환경에서 재검증하도록 분리.
 - **검증**: 새 주소로 실제 파싱 성공(ITWorld 20건, ZDNet 30건, dry-run).
-- **추가 확인**: 이후 ITWorld의 robots.txt가 모든 크롤러에 `/feed/` 경로를 금지하는 것을 확인했습니다. 파싱은 되지만 자동 수집 대상에서는 제외합니다(소스 설정 정리는 후속 작업).
+- **추가 확인**: 이후 ITWorld의 robots.txt가 모든 크롤러에 `/feed/` 경로를 금지하는 것을 확인해, 파싱은 되지만 소스를 `paused`로 바꿔 전체·정기 수집에서 제외했습니다(테스트로 고정).
 - **미해결**: 클라우드에서 막힌 국내 소스 9곳은 아직 검증 전입니다([로컬 검증 절차](docs/DEVELOPMENT.md#6-rss-접속파싱-테스트)).
 
 </details>
@@ -214,9 +214,9 @@ npm run dev                                   # http://localhost:5173
 
 ## 테스트와 현재 개발 상태
 
-| 구분 | 결과 (2026-11-02, `feat/domestic-content` 기준) |
+| 구분 | 결과 (2026-11-03, `main` 기준) |
 | :--- | :--- |
-| 백엔드 | pytest 668개 통과 (단위 + MariaDB 통합), ruff, `alembic check` |
+| 백엔드 | pytest 670개 통과 (단위 + MariaDB 통합), ruff, `alembic check` |
 | 프론트엔드 | Vitest 90개 통과, ESLint(2.0 파일), 빌드 |
 | E2E | Playwright 13개 시나리오 통과 (학습 완료·XP, 진로·목표, 개인화 설정, Home→News/Dev/Career 이동, News 직접 접속·새로고침, Dev 채널·정렬, 모바일 폭) |
 | CI | GitHub Actions 4개 job: Backend · Frontend · E2E · Secret scan |

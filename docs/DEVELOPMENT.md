@@ -34,7 +34,7 @@ git switch main
 git pull
 ```
 
-아직 병합되지 않은 PR을 시험할 때는 해당 브랜치로 바꿉니다(예: `git fetch origin feat/domestic-content` 후 `git switch feat/domestic-content`).
+아직 병합되지 않은 PR을 시험할 때는 해당 브랜치로 바꿉니다(`git fetch origin <브랜치>` 후 `git switch <브랜치>`).
 
 ## 3. MariaDB
 
@@ -130,7 +130,7 @@ uv run python -m app.jobs collect --source etnews --dry-run
 | Dev: `toss-tech`, `naver-d2`, `daangn-tech`, `kakaopay-tech` | |
 
 실행하지 않을 소스:
-- `itworld-korea`: robots.txt가 `/feed/` 수집을 금지합니다.
+- `itworld-korea`: robots.txt가 `/feed/` 수집을 금지합니다. `paused` 상태라 전체 수집에서는 빠지지만, `--source`로 직접 지정하면 실행되니 지정하지 마세요.
 - `woowahan-tech`: 사이트가 자동 접근을 403으로 차단합니다. `paused` 상태지만 `--source`로 이름을 직접 지정하면 실행되니 지정하지 마세요.
 
 ### 결과 읽는 법
