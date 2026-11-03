@@ -22,6 +22,11 @@ def test_repository_files_are_valid():
     # Korean sources only (overseas sources and translation were dropped).
     assert {s.language for s in sources.sources} == {"ko"}
     assert {s.adapter for s in sources.sources} == {"rss"}
+    # Not collected: ITWorld's robots.txt forbids /feed/; Woowahan's site blocks bots.
+    assert {s.slug for s in sources.sources if s.status == "paused"} == {
+        "itworld-korea",
+        "woowahan-tech",
+    }
 
 
 def with_source(**changes):
