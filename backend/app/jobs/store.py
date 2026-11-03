@@ -1,5 +1,8 @@
 """Save collected items: insert new ones, refresh metrics of known ones, tag once.
 
+The feed description (excerpt) is stored only for sources allowed to show it
+(options.excerpt); for the others it is used for tagging and not kept.
+
 The caller owns the transaction.
 """
 
@@ -13,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.db.types import utc_now
 from app.integrations.sources import CollectedItem
 from app.models.content import Content, ContentSource, ContentTechnology
+from app.services.source_terms import shows_excerpt
 from app.services.tagging import Tagger
 
 # Tracking parameters that make one article look like many.
@@ -41,13 +45,13 @@ class StoreResult:
     updated: int = 0
 
 
-def _tag(db: Session, content: Content, tagger: Tagger) -> None:
+def _tag(db: Session, content: Content, tagger: Tagger, excerpt: str | None) -> None:
     db.execute(
         delete(ContentTechnology).where(
             ContentTechnology.content_id == content.id, ContentTechnology.method == "rule"
         )
     )
-    for tech_id in sorted(tagger.match(content.title, content.excerpt, content.source_tags)):
+    for tech_id in sorted(tagger.match(content.title, excerpt, content.source_tags)):
         db.add(ContentTechnology(content_id=content.id, technology_id=tech_id, method="rule"))
 
 
@@ -55,6 +59,7 @@ def store_items(
     db: Session, source: ContentSource, items: list[CollectedItem], tagger: Tagger
 ) -> StoreResult:
     result = StoreResult()
+    keep_excerpt = shows_excerpt(source)
     by_hash: dict[str, CollectedItem] = {}
     for item in items:
         url = normalize_url(item.url)
@@ -81,7 +86,9 @@ def store_items(
             "url": item.url[:2048],
             "title": item.title[:500],
             "external_id": item.external_id,
-            "excerpt": item.excerpt,
+            # The feed description is kept only when the source's terms allow showing it;
+            # otherwise it is used for tagging and dropped.
+            "excerpt": item.excerpt if keep_excerpt else None,
             "author": (item.author or None) and item.author[:200],
             "source_tags": [t[:64] for t in item.tags[:20]],
             "score": item.score,
@@ -100,7 +107,7 @@ def store_items(
             )
             db.add(content)
             db.flush()
-            _tag(db, content, tagger)
+            _tag(db, content, tagger, item.excerpt)
             result.inserted += 1
             continue
 
@@ -121,6 +128,6 @@ def store_items(
             result.updated += 1
         if retag:
             db.flush()
-            _tag(db, content, tagger)
+            _tag(db, content, tagger, item.excerpt)
     db.flush()
     return result

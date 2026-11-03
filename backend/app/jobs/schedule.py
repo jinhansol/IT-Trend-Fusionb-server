@@ -27,6 +27,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.content import ContentSource
+from app.services.source_terms import terms_approved
 
 SCHEDULE_FILE = Path(__file__).resolve().parents[2] / "content" / "collect-schedule.yaml"
 GROUPS = ("news", "dev")
@@ -97,7 +98,8 @@ def load_schedule(path: Path = SCHEDULE_FILE) -> Schedule:
 def check_sources(group: str, sources: list[ContentSource]) -> tuple[list, list[str]]:
     """Split the listed sources into those to run and reasons for the rest.
 
-    A news group runs only news sources, a dev group only the others, and only active ones.
+    A news group runs only news sources, a dev group only the others, and only active
+    sources whose terms are approved.
     """
     run, skipped = [], []
     for source in sources:
@@ -105,6 +107,8 @@ def check_sources(group: str, sources: list[ContentSource]) -> tuple[list, list[
             skipped.append(f"{source.slug}: a {source.kind} source is not in the {group} group")
         elif source.status != "active":
             skipped.append(f"{source.slug}: {source.status}")
+        elif not terms_approved(source):
+            skipped.append(f"{source.slug}: terms not approved")
         else:
             run.append(source)
     return run, skipped

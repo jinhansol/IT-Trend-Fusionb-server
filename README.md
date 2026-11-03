@@ -210,7 +210,7 @@ npm ci
 npm run dev                                   # http://localhost:5173
 ```
 
-수집은 웹 서버와 별개입니다. `uv run python -m app.jobs collect --source <slug> --dry-run`은 **저장하지 않고** 접속·파싱만 확인합니다. 이용 조건이 확인되지 않은 소스는 저장 수집을 하지 마세요.
+수집은 웹 서버와 별개입니다. `uv run python -m app.jobs diagnose`는 DB 없이 **저장하지 않고** robots.txt 확인 후 접속·파싱·공급량만 확인합니다. 저장 수집(`collect`)은 `sources.yaml`에서 이용 조건이 승인된(`options.terms: approved`) 소스만 실행되며, 현재 승인된 소스는 없습니다.
 
 ## 테스트와 현재 개발 상태
 

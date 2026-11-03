@@ -1,7 +1,7 @@
 """Summarize News and Dev items with the E1 summarizer, once per article text.
 
-Only items whose source has ai_summary on are touched. The article body comes from
-`bodies`, supplied by the caller (HTML or Markdown); the feed excerpt is never
+Only items whose source has ai_summary on, with approved terms, are touched. The article
+body comes from `bodies`, supplied by the caller (HTML or Markdown); the feed excerpt is never
 summarized, so an item without a body is left alone. A stored done or skipped result
 for the same input hash is kept without a model call; a failure is retried on later
 runs up to MAX_ATTEMPTS. Each item is saved in its own transaction; contents rows are
@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload, sessionmaker
 from app.db.types import utc_now
 from app.integrations.llm import LLMClient
 from app.models.content import Content, ContentSource, ContentSummary
+from app.services.source_terms import ai_summary_allowed
 from app.summaries.policy import Budget
 from app.summaries.prompts import PROMPT_VERSIONS
 from app.summaries.summarizer import Summarizer, SummaryInput
@@ -54,7 +55,7 @@ def summarize_contents(
                 select(Content)
                 .join(ContentSource, ContentSource.id == Content.source_id)
                 .where(
-                    ContentSource.ai_summary.is_(True),
+                    ai_summary_allowed(),
                     ContentSource.kind.in_(("news", "blog")),
                     ContentSource.status != "retired",
                 )

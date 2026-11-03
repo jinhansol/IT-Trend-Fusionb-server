@@ -67,7 +67,7 @@ def webdev_source() -> dict:
         "channel_name": "web.dev",
         "max_items": 10,
         "ai_summary": True,
-        "options": {"license": "CC-BY-4.0"},
+        "options": {"license": "CC-BY-4.0", "terms": "approved", "excerpt": True},
     }
 
 

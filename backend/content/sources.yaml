@@ -10,25 +10,44 @@
 #
 # DevHub 2.0 collects Korean IT news and Korean developer blogs only; overseas sources
 # and English->Korean translation were dropped (sources removed here are retired, their
-# rows kept). A working feed is not a licence: scheduled collection takes only sources
-# listed in content/collect-schedule.yaml, once their terms are checked.
+# rows kept).
 #
-# Feed addresses carried over from v1 have not all been checked from this environment.
-# Checked 2026-11-02: itworld-korea and zdnet-korea (new feed addresses below), geeknews,
-# kakao-tech, lycorp-tech. A dead feed only fails its own run (see job_runs).
+# options.terms   unverified (default) | approved. A working feed is not a licence:
+#                 `collect` saves only active sources with terms: approved, and scheduled
+#                 collection (content/collect-schedule.yaml) needs the same. Unverified
+#                 sources can still be checked read-only: python -m app.jobs diagnose
+# options.excerpt true stores and shows the feed's description (needs terms: approved);
+#                 otherwise it is used for tagging only and a card is title, source, date
+#                 and link. ai_summary is a third, separate permission (also needs
+#                 terms: approved); approved terms alone allow neither.
+# No source below has its terms approved yet (2026-11-03): see
+# docs/devhub-2.0/DevHub-2.0-Korean-RSS-Supply.md for the checks and what is missing.
+#
+# Feeds checked 2026-11-03 with the collector's fetcher and parser (robots.txt first).
+# New candidates are paused until their terms are checked. A dead feed only fails its
+# own run (see job_runs).
 #
 # Load: uv run python -m app.content_loader sources content/sources.yaml
 
 sources:
   # --- Home: Korean IT news ----------------------------------------------------------------
   - { slug: zdnet-korea, name: ZDNet Korea, kind: news, adapter: rss, language: ko, site_url: "https://zdnet.co.kr/", feed_url: "https://feeds.feedburner.com/zdkorea" }
-  - { slug: etnews, name: 전자신문, kind: news, adapter: rss, language: ko, site_url: "https://www.etnews.com/", feed_url: "https://rss.etnews.com/Section903.xml" }
+  # The SW section (04). Section903 was "most read" (horoscopes, entertainment).
+  - { slug: etnews, name: 전자신문, kind: news, adapter: rss, language: ko, site_url: "https://www.etnews.com/", feed_url: "https://rss.etnews.com/04.xml" }
   # robots.txt disallows /feed/ for every crawler (and AI bots site-wide); not collected.
   - { slug: itworld-korea, name: ITWorld Korea, kind: news, adapter: rss, language: ko, site_url: "https://www.itworld.co.kr/", feed_url: "https://www.itworld.co.kr/feed/", status: paused }
-  - { slug: ciokorea, name: CIO Korea, kind: news, adapter: rss, language: ko, site_url: "https://www.ciokorea.com/", feed_url: "https://www.ciokorea.com/rss/all.xml" }
-  - { slug: ddaily, name: 디지털데일리, kind: news, adapter: rss, language: ko, site_url: "https://www.ddaily.co.kr/", feed_url: "https://www.ddaily.co.kr/news/rss/allArticle.xml" }
-  - { slug: bloter, name: 블로터, kind: news, adapter: rss, language: ko, site_url: "https://www.bloter.net/", feed_url: "https://www.bloter.net/rss" }
-  - { slug: boannews, name: 보안뉴스, kind: news, adapter: rss, language: ko, site_url: "https://www.boannews.com/", feed_url: "https://www.boannews.com/media/rss.xml" }
+  # The old address redirects to cio.com and answers 404; robots.txt disallows the
+  # Korean /kr/feed/ path. Not collected.
+  - { slug: ciokorea, name: CIO Korea, kind: news, adapter: rss, language: ko, site_url: "https://www.ciokorea.com/", feed_url: "https://www.ciokorea.com/rss/all.xml", status: paused }
+  # No working feed found: this address redirects to the home page, the site lists none.
+  - { slug: ddaily, name: 디지털데일리, kind: news, adapter: rss, language: ko, site_url: "https://www.ddaily.co.kr/", feed_url: "https://www.ddaily.co.kr/news/rss/allArticle.xml", status: paused }
+  # bloter.net/rss redirects to plain http; the CDN serves the same feed over https.
+  - { slug: bloter, name: 블로터, kind: news, adapter: rss, language: ko, site_url: "https://www.bloter.net/", feed_url: "https://cdn.bloter.net/rss/gns_allArticle.xml" }
+  - { slug: boannews, name: 보안뉴스, kind: news, adapter: rss, language: ko, site_url: "https://www.boannews.com/", feed_url: "https://www.boannews.com/rss/allArticle.xml" }
+  # Candidates (feeds parse; terms not checked yet).
+  - { slug: aitimes, name: AI타임스, kind: news, adapter: rss, language: ko, site_url: "https://www.aitimes.com/", feed_url: "https://www.aitimes.com/rss/allArticle.xml", status: paused }
+  # KISA security advisories: title, date and link only (the feed has no description).
+  - { slug: boho-notice, name: 보호나라 보안공지, kind: news, adapter: rss, language: ko, site_url: "https://www.boho.or.kr/", feed_url: "https://www.boho.or.kr/kr/rss.do?bbsId=B0000133", status: paused }
 
   # --- Dev: Korean developer community -----------------------------------------------------
   - slug: geeknews
@@ -50,3 +69,6 @@ sources:
   - { slug: daangn-tech, name: 당근 테크 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://medium.com/daangn", feed_url: "https://medium.com/feed/daangn", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
   - { slug: kakaopay-tech, name: 카카오페이 기술 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://tech.kakaopay.com/", feed_url: "https://tech.kakaopay.com/rss", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
   - { slug: lycorp-tech, name: LY Corporation Tech Blog, kind: blog, adapter: rss, language: ko, site_url: "https://techblog.lycorp.co.jp/ko", feed_url: "https://techblog.lycorp.co.jp/ko/feed/index.xml", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10 }
+  # Candidates (feeds parse at the addresses their home pages link; terms not checked yet).
+  - { slug: kurly-tech, name: 컬리 기술 블로그, kind: blog, adapter: rss, language: ko, site_url: "https://helloworld.kurly.com/", feed_url: "https://helloworld.kurly.com/rss.xml", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10, status: paused }
+  - { slug: outsider-blog, name: Outsider's Dev Story, kind: blog, adapter: rss, language: ko, site_url: "https://blog.outsider.ne.kr/", feed_url: "https://blog.outsider.ne.kr/atom", channel: kr-techblog, channel_name: 국내 기술블로그, max_items: 10, status: paused }

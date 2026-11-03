@@ -18,7 +18,13 @@ import app.integrations.http as http_module
 from app.jobs import __main__ as cli
 from app.jobs.schedule import crontab, load_schedule
 from app.main import create_app
-from tests.collect_helpers import FakeFetcher, fixture, sample_routes, seed_catalog
+from tests.collect_helpers import (
+    FakeFetcher,
+    feed_requests,
+    fixture,
+    sample_routes,
+    seed_catalog,
+)
 from tests.conftest import BACKEND_DIR, TEST_JWT_SECRET
 
 pytestmark = pytest.mark.integration
@@ -90,8 +96,10 @@ def counts(engine):
 def test_a_group_collects_only_its_listed_sources(run, clean_db, capsys):
     code, fetcher = run("dev")
     assert code == 0
-    fetched = {url for url, _ in fetcher.calls}
+    fetched = feed_requests(fetcher)
     assert fetched == {"https://blog.example.com/atom", "https://dev.to/api/articles"}
+    # robots.txt is read once for the RSS feed's host (404 here: no rules), not for APIs.
+    assert {u for u, _ in fetcher.calls} - fetched == {"https://blog.example.com/robots.txt"}
     found = counts(clean_db)
     assert found["devto"] == 3 and found["sample-blog"] == 1
     assert found["sample-news"] == found["hackernews"] == found["stackoverflow"] == 0
@@ -100,7 +108,7 @@ def test_a_group_collects_only_its_listed_sources(run, clean_db, capsys):
     out = capsys.readouterr().out
     assert code == 0
     assert "not collected: hackernews: a community source is not in the news group" in out
-    assert {url for url, _ in fetcher.calls} == {NEWS_FEED}
+    assert feed_requests(fetcher) == {NEWS_FEED}
     assert counts(clean_db)["hackernews"] == 0
 
 
@@ -136,7 +144,7 @@ def test_one_failing_source_does_not_stop_the_others_and_the_next_run_recovers(r
     broken.pop("https://blog.example.com/atom")  # 404 for the blog feed
     code, fetcher = run("dev", broken)
     assert code == 1
-    tried = {url for url, _ in fetcher.calls}
+    tried = feed_requests(fetcher)
     assert tried == {"https://dev.to/api/articles", "https://blog.example.com/atom"}
     statuses = dict(
         rows(

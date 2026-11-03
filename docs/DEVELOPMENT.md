@@ -106,46 +106,40 @@ uv run python -m app.content_loader load content/python                      # �
 
 수집은 웹 서버와 별개의 명령입니다. 웹 화면을 새로고침해도 외부 사이트에 요청하지 않습니다.
 
-### dry-run과 저장 수집의 차이
+### 진단·dry-run·저장 수집의 차이
+
+모든 명령은 RSS를 요청하기 전에 그 사이트의 `robots.txt`를 확인하고, 금지된 피드는 요청하지 않습니다. 리다이렉트되는 위치도 확인합니다. robots.txt가 401·403·429나 서버 오류로 응답하면 그 사이트는 요청하지 않습니다.
 
 | 명령 | 외부 요청 | DB 기록 |
 | :--- | :--- | :--- |
-| `collect --source <slug> --dry-run` | 피드 1회 | **없음** (`job_runs`도 기록하지 않음) |
-| `collect --source <slug>` | 피드 1회 | 콘텐츠 저장 + `job_runs` 기록 |
-| `collect --group news\|dev` | 허용 목록의 소스 | 저장 (`content/collect-schedule.yaml` 허용 목록만, 현재 비어 있음) |
-| `collect` (옵션 없음) | 모든 활성 소스 | 저장. 이용 조건 확인 전에는 쓰지 마세요 |
+| `diagnose [--source <slug>] [--group news\|dev]` | robots.txt + 피드 1회 | **없음** (DB 접속도 하지 않음, `sources.yaml`을 직접 읽음) |
+| `collect --source <slug> --dry-run` | robots.txt + 피드 1회 | **없음** (`job_runs`도 기록하지 않음) |
+| `collect --source <slug>` | 이용 조건 승인 소스만 | 콘텐츠 저장 + `job_runs` 기록 |
+| `collect --group news\|dev` | 허용 목록 중 승인 소스 | 저장 (`content/collect-schedule.yaml`, 현재 비어 있음) |
+| `collect` (옵션 없음) | active이면서 승인된 소스 | 저장 |
 
-### 접속·파싱만 확인하기
+저장 수집은 `content/sources.yaml`에서 `options.terms: approved`이고 `status: active`인 소스만 합니다. 그 밖의 소스는 `refused`로 표시만 하고 요청도 기록도 하지 않습니다. 현재 승인된 소스는 없습니다. 승인 절차와 소스별 측정값은 [국내 RSS 공급원 검증](devhub-2.0/DevHub-2.0-Korean-RSS-Supply.md)에 있습니다.
+
+### 접속·파싱·공급량 확인하기
 
 ```powershell
-uv run python -m app.jobs collect --source etnews --dry-run
+uv run python -m app.jobs diagnose                 # sources.yaml의 모든 소스 (paused 포함)
+uv run python -m app.jobs diagnose --source etnews
 ```
 
-소스는 하나씩 실행합니다. 실행 전에 브라우저로 그 사이트의 `/robots.txt`를 열어 피드 경로가 `Disallow`인지 확인하고, 금지된 소스는 실행하지 않습니다.
-
-| 우선 확인 대상 (클라우드 개발 환경에서 네트워크 제한으로 검증하지 못한 소스) | 참고 |
-| :--- | :--- |
-| News: `etnews`, `ddaily`, `bloter`, `boannews` | |
-| News: `ciokorea` | ITWorld Korea와 같은 운영사 계열이라 같은 robots.txt 제한이 있을 수 있음. 먼저 확인 |
-| Dev: `toss-tech`, `naver-d2`, `daangn-tech`, `kakaopay-tech` | |
-
-실행하지 않을 소스:
-- `itworld-korea`: robots.txt가 `/feed/` 수집을 금지합니다. `paused` 상태라 전체 수집에서는 빠지지만, `--source`로 직접 지정하면 실행되니 지정하지 마세요.
-- `woowahan-tech`: 사이트가 자동 접근을 403으로 차단합니다. `paused` 상태지만 `--source`로 이름을 직접 지정하면 실행되니 지정하지 마세요.
-
-### 결과 읽는 법
+한 줄에 피드 건수, 최신 발행일, 최근 7일·30일 건수, 날짜 없는 항목, 정규화 후 중복 링크, 소개문 유무, 그리고 한 번에 받는 범위(`window`)와 정기 수집 간격을 비교한 결과(`ok`/`risk`)가 나옵니다.
 
 | 출력 | 의미 | 조치 |
 | :--- | :--- | :--- |
-| `dry-run   fetched N ...` + 제목 3개 | 접속·파싱 성공 | 기록. **재표시 허락과는 별개** |
+| `items N ... window ... ok` | 접속·파싱 성공 | 기록. **재표시 허락과는 별개** |
+| `window ... risk` | 수집 간격 사이에 피드에서 밀려나는 글이 생길 수 있음 | 간격 조정 검토 |
+| `not requested — robots.txt: Disallow ...` | robots.txt가 피드 경로를 금지 | 수집 대상에서 제외 |
 | `HTTP 404 from ...` | 피드 주소 변경 | 사이트 홈페이지의 RSS 링크를 찾아 기록 |
 | `HTTP 403 from ...` | 사이트가 차단 | 수집 대상에서 제외. 우회하지 않음 |
 | `ConnectError` / 시간 초과 | 네트워크 문제 | 한 번만 다시 시도 |
-| `UnusableResponse` / 파싱 실패 | RSS 형식이 아님 | 기록 |
+| `not a readable RSS/Atom feed` | 빈 응답이거나 RSS 형식이 아님 | 기록 |
 
-dry-run 출력에는 발행일이 나오지 않습니다. 최신성은 브라우저로 피드를 열어 최근 글 날짜를 확인합니다.
-
-### 저장 수집과 중복 확인 (이용 조건을 확인한 소스만)
+### 저장 수집과 중복 확인 (이용 조건을 승인한 소스만)
 
 ```powershell
 uv run python -m app.jobs collect --source <slug>       # 저장

@@ -111,8 +111,8 @@ def test_a_server_zone_with_daylight_saving_is_refused():
         crontab(schedule, Path("/b"), "uv", Path("/l"), server_tz="America/New_York")
 
 
-def source(slug, kind, status="active"):
-    return SimpleNamespace(slug=slug, kind=kind, status=status)
+def source(slug, kind, status="active", terms="approved"):
+    return SimpleNamespace(slug=slug, kind=kind, status=status, options={"terms": terms})
 
 
 def test_a_group_runs_only_its_own_active_sources():
@@ -125,6 +125,14 @@ def test_a_group_runs_only_its_own_active_sources():
         "techcrunch: a news source is not in the dev group",
         "devto: paused",
     ]
+
+
+def test_a_source_whose_terms_are_not_approved_is_never_scheduled():
+    unchecked = source("toss-tech", "blog", terms="unverified")
+    legacy = SimpleNamespace(slug="old-row", kind="blog", status="active", options={})
+    run, skipped = check_sources("dev", [unchecked, legacy])
+    assert run == []
+    assert skipped == ["toss-tech: terms not approved", "old-row: terms not approved"]
 
 
 def test_the_default_schedule_file_is_in_content():
