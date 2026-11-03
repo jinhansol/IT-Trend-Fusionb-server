@@ -41,8 +41,9 @@ def test_the_repository_schedule_is_the_trial_policy():
 
 def test_only_sources_with_checked_terms_are_scheduled():
     schedule = load_schedule()
-    assert schedule.groups["news"].sources == []  # techcrunch: terms questions still open
-    assert schedule.groups["dev"].sources == ["webdev"]
+    # No Korean source has confirmed reuse terms yet, so nothing is collected on schedule.
+    assert schedule.groups["news"].sources == []
+    assert schedule.groups["dev"].sources == []
     defined = {s.slug: s for s in read_sources(BACKEND_DIR / "content" / "sources.yaml").sources}
     for group, settings in schedule.groups.items():
         for slug in settings.sources:

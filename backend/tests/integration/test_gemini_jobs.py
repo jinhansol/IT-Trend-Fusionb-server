@@ -1,11 +1,10 @@
-"""python -m app.jobs translate|summarize with Gemini, end to end against the test database.
+"""python -m app.jobs summarize with Gemini, end to end against the test database.
 
 google.genai.Client is replaced by a fake that answers like Gemini, so the command line,
 the settings, the Gemini client and the jobs run as they would; nothing leaves the process.
 """
 
 import json
-import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,9 +16,8 @@ import app.integrations.gemini as gemini_module
 from app.jobs import __main__ as cli
 from app.main import create_app
 from tests.collect_helpers import collect_all, seed_catalog
-from tests.integration.test_ai_summaries import BLOG_URL, EN_URL, NEWS_URL
+from tests.integration.test_ai_summaries import BLOG_URL, NEWS_URL, routes
 from tests.integration.test_ai_summaries import sources as summary_sources
-from tests.integration.test_translations import KOREAN, routes
 from tests.summary_helpers import DEV_SPRING, NEWS_KO
 
 pytestmark = pytest.mark.integration
@@ -53,9 +51,6 @@ class FakeGemini:
         FakeGemini.requests.append({"model": model, "contents": contents})
         if FakeGemini.error:
             raise FakeGemini.error
-        if "번역기" in config.system_instruction:
-            ko_title, ko_excerpt = KOREAN[re.search(r"<title>(.*)</title>", contents).group(1)]
-            return reply({"title": ko_title, "excerpt": ko_excerpt})
         if "기술 블로그" in config.system_instruction:
             return reply(DEV_SPRING)
         return reply(NEWS_KO)
@@ -94,19 +89,18 @@ def news(settings):
     return {i["url"]: i for i in items}
 
 
-def test_translate_stores_korean_titles_within_the_call_cap(run, engine, integration_settings):
-    assert run("translate", "--max-calls", "2") == 0
-    assert len(FakeGemini.requests) == 2  # three English items, two allowed calls
+def test_summarize_stays_within_the_call_cap(run, engine):
+    bodies = [
+        f"--body={NEWS_URL}={FIXTURES}/news_ko.html",
+        f"--body={BLOG_URL}={FIXTURES}/dev_spring.html",
+    ]
+    assert run("summarize", "--max-calls", "1", *bodies) == 0
+    assert len(FakeGemini.requests) == 1  # two bodies, one allowed call
     assert FakeGemini.created[0]["api_key"] == KEY
     assert FakeGemini.requests[0]["model"] == "gemini-3.1-flash-lite"
-    assert rows(engine, "SELECT COUNT(*), MIN(model) FROM content_translations") == [
-        (2, "gemini-3.1-flash-lite")
+    assert rows(engine, "SELECT COUNT(*), MIN(model) FROM content_summaries") == [
+        (1, "gemini-3.1-flash-lite")
     ]
-
-    assert run("translate") == 0  # the third item; stored ones are reused
-    assert len(FakeGemini.requests) == 3
-    item = news(integration_settings)[EN_URL]
-    assert item["title"].startswith("Nimbus delays") and item["translation"]["title"]
 
 
 def test_summarize_reads_local_bodies_only(run, engine, integration_settings):
@@ -124,32 +118,31 @@ def test_summarize_reads_local_bodies_only(run, engine, integration_settings):
 
 
 def test_without_a_key_nothing_is_sent_or_saved(run, engine, capsys):
-    assert run("translate", key=None) == 2
     assert run("summarize", f"--body={NEWS_URL}={FIXTURES}/news_ko.html", key=None) == 2
     assert "GEMINI_API_KEY is not set" in capsys.readouterr().err
     assert FakeGemini.created == [] and FakeGemini.requests == []
-    assert rows(engine, "SELECT COUNT(*) FROM content_translations") == [(0,)]
     assert rows(engine, "SELECT COUNT(*) FROM content_summaries") == [(0,)]
 
 
-def test_a_rejected_key_keeps_the_english_original(run, engine, integration_settings, capsys):
+def test_a_rejected_key_keeps_the_plain_card(run, engine, integration_settings, capsys):
     from google.genai import errors
 
     FakeGemini.error = errors.ClientError(
         401, {"error": {"code": 401, "status": "UNAUTHENTICATED", "message": "bad key"}}
     )
-    assert run("translate", "--max-calls", "4") == 1
+    assert run("summarize", f"--body={NEWS_URL}={FIXTURES}/news_ko.html") == 1
     err = capsys.readouterr()
     assert "check GEMINI_API_KEY" in err.err and KEY not in err.out + err.err
-    assert len(FakeGemini.requests) == 3  # not retried: one request per item
-    assert rows(engine, "SELECT DISTINCT status, error_code, title FROM content_translations") == [
-        ("failed", "bad_request", None)
+    assert len(FakeGemini.requests) == 1  # not retried
+    assert rows(engine, "SELECT status, error_code FROM content_summaries") == [
+        ("failed", "bad_request")
     ]
-    assert news(integration_settings)[EN_URL]["translation"] is None
+    item = news(integration_settings)[NEWS_URL]
+    assert item["ai_summary"] is None and item["excerpt"]
 
 
 def test_bad_arguments_stop_before_any_call(run, capsys):
-    assert run("translate", "--max-calls", "0") == 2
+    assert run("summarize", "--max-calls", "0") == 2
     assert run("summarize", "--body", "https://x.example/a") == 2
     assert run("summarize", "--body", "https://x.example/a=missing.html") == 2
     assert FakeGemini.created == []

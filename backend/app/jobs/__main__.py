@@ -1,19 +1,18 @@
 """Collector and AI job command line. Runs separately from the web app.
 
     uv run python -m app.jobs collect                    every active source
-    uv run python -m app.jobs collect --source devto     one or more sources
+    uv run python -m app.jobs collect --source bloter    one or more sources
     uv run python -m app.jobs collect --dry-run          fetch and parse only, save nothing
     uv run python -m app.jobs collect --group dev        the scheduled list for a group
     uv run python -m app.jobs crontab                    print the cron lines for the groups
     uv run python -m app.jobs collect-report --days 7    runs and new items per source
-    uv run python -m app.jobs translate --max-calls 4    Korean titles for English news
-    uv run python -m app.jobs summarize --max-calls 1    summaries of web.dev articles
+    uv run python -m app.jobs summarize --max-calls 1    AI summaries (sources with ai_summary)
     uv run python -m app.jobs summarize --body URL=FILE  summaries of bodies held locally
 
-translate and summarize call Gemini (GEMINI_API_KEY, GEMINI_MODEL) for sources that have
-ai_translation / ai_summary on, at most --max-calls requests per run. Without --body,
-summarize fetches article pages only for the web.dev source (app/jobs/article_bodies.py);
-with --body it uses the given local HTML or Markdown files and downloads nothing.
+summarize calls Gemini (GEMINI_API_KEY, GEMINI_MODEL) for sources that have ai_summary on,
+at most --max-calls requests per run. Without --body it fetches article pages only for
+sources app/jobs/article_bodies.py knows how to check (none registered at present); with
+--body it uses the given local HTML or Markdown files and downloads nothing.
 --group reads content/collect-schedule.yaml (app/jobs/schedule.py); scheduled runs never
 call Gemini. Exit status is 1 when any source or item failed, 2 for a usage or setup error.
 """
@@ -36,7 +35,6 @@ from app.jobs.article_bodies import WEBDEV_HOSTS, finished_ids, webdev_bodies
 from app.jobs.runner import Collector, UnknownSource
 from app.jobs.schedule import GROUPS, SCHEDULE_FILE, check_sources, crontab, load_schedule
 from app.jobs.summarize import summarize_contents
-from app.jobs.translate import translate_news
 from app.summaries.policy import Budget
 
 
@@ -57,11 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     cron.add_argument("--schedule", type=Path, default=SCHEDULE_FILE, help=argparse.SUPPRESS)
     report = commands.add_parser("collect-report", help="runs and new items per source")
     report.add_argument("--days", type=int, default=7)
-    for name, text in (("translate", "translate English news"), ("summarize", "summarize")):
-        job = commands.add_parser(name, help=f"{text} with Gemini")
-        job.add_argument("--max-calls", type=int, default=4, metavar="N")
-        if name == "summarize":
-            job.add_argument("--body", action="append", default=[], metavar="URL=FILE")
+    job = commands.add_parser("summarize", help="summarize articles with Gemini")
+    job.add_argument("--max-calls", type=int, default=4, metavar="N")
+    job.add_argument("--body", action="append", default=[], metavar="URL=FILE")
     args = parser.parse_args(argv)
 
     if args.command == "crontab":
@@ -187,9 +183,7 @@ def _model_job(args, settings) -> int:
     budget = Budget(max_calls=args.max_calls)
     fetcher = None
     try:
-        if args.command == "translate":
-            result = translate_news(engine, client, budget)
-        elif bodies:
+        if bodies:
             result = summarize_contents(engine, client, lambda item: bodies.get(item.url), budget)
         else:
             fetcher = HttpFetcher(settings, allowed_hosts=WEBDEV_HOSTS)

@@ -1,7 +1,7 @@
 """Google Gemini behind the LLMClient interface (google-genai SDK). Jobs only, server side.
 
-One HTTP request per complete() call: the SDK's own retries are off, so the summary and
-translation retry policy and call budget count every request that reaches Google.
+One HTTP request per complete() call: the SDK's own retries are off, so the summary job's
+retry policy and call budget count every request that reaches Google.
 Provider errors become LLMError kinds. Messages carry the HTTP code and status only,
 never the API key or the request text.
 """
@@ -44,7 +44,7 @@ class GeminiClient:
             system_instruction=request.system,
             response_mime_type="application/json",
             max_output_tokens=request.max_output_tokens,
-            # Thinking tokens share the output cap; these jobs only extract and translate.
+            # Thinking tokens share the output cap; the summary job only extracts.
             thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
         )
         try:

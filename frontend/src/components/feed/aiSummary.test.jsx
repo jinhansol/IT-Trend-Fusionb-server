@@ -99,15 +99,4 @@ describe("AI summary on cards", () => {
     expect(screen.queryByRole("region", { name: "AI 요약" })).toBeNull();
     expect(screen.getByText("Feed excerpt text")).toBeTruthy();
   });
-
-  it("works next to a translation", () => {
-    render(
-      <ContentCard
-        item={{ ...BASE, translation: { language: "ko", title: "번역된 제목", excerpt: "번역된 소개" }, ai_summary: NEWS }}
-      />
-    );
-    expect(screen.getByRole("link", { name: /번역된 제목/ })).toBeTruthy();
-    expect(screen.getByText("AI 번역")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "AI 요약" })).toBeTruthy();
-  });
 });
