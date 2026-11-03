@@ -19,6 +19,7 @@ One robots.txt request per host per run; the answer is cached in the policy obje
 """
 
 import re
+import string
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -69,13 +70,42 @@ def _groups(text: str) -> list[tuple[list[str], list[tuple[bool, str]]]]:
     return groups
 
 
+def _product_token(agent: str) -> str:
+    """The product token of a User-agent value: "DevHubCollector/2.0 (+...)" ->
+    "devhubcollector". RFC 9309 2.2.1 compares this token, case-insensitively, as a whole."""
+    return re.split(r"[/\s]", agent.strip(), maxsplit=1)[0].lower()
+
+
 def parse_rules(text: str, token: str = PRODUCT_TOKEN) -> tuple[tuple[bool, str], ...]:
-    """The rules that apply to `token`: its own groups, else the `*` groups."""
+    """The rules that apply to `token`: the groups naming exactly that product token,
+    else the `*` groups. A group for another crawler never applies to us."""
     groups = _groups(text)
-    named = [rules for agents, rules in groups if any(a != "*" and a in token for a in agents)]
+    token = token.lower()
+    named = [rules for agents, rules in groups if any(_product_token(a) == token for a in agents)]
     if named:
         return tuple(r for rules in named for r in rules)
     return tuple(r for agents, rules in groups if "*" in agents for r in rules)
+
+
+_PERCENT = re.compile(r"%([0-9A-Fa-f]{2})")
+_UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
+
+
+def normalize_path(value: str) -> str:
+    """One spelling for comparing URL paths with robots.txt paths (RFC 9309 2.2.2):
+    non-ASCII characters become UTF-8 percent-encodings; a percent-encoded unreserved
+    character is decoded ("%70" -> "p"); every other percent-encoding, such as a
+    reserved "/" or "?", stays encoded with upper-case hex, so "%2F" never equals "/".
+    `*` and `$` in rules are plain characters here and keep their special meaning."""
+    encoded = "".join(
+        c if ord(c) < 128 else "".join(f"%{b:02X}" for b in c.encode("utf-8")) for c in value
+    )
+
+    def decode(match: re.Match[str]) -> str:
+        char = chr(int(match.group(1), 16))
+        return char if char in _UNRESERVED else f"%{match.group(1).upper()}"
+
+    return _PERCENT.sub(decode, encoded)
 
 
 def _pattern(path: str) -> re.Pattern[str]:
@@ -87,11 +117,12 @@ def _pattern(path: str) -> re.Pattern[str]:
 
 def check_path(rules: tuple[tuple[bool, str], ...], url: str) -> RobotsVerdict:
     parts = urlsplit(url)
-    path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+    path = normalize_path((parts.path or "/") + (f"?{parts.query}" if parts.query else ""))
     best: tuple[int, bool, str] | None = None
     for allow, value in rules:
-        if _pattern(value).match(path):
-            candidate = (len(value), allow, value)
+        rule = normalize_path(value)
+        if _pattern(rule).match(path):
+            candidate = (len(rule), allow, value)
             if best is None or candidate[:2] > best[:2]:
                 best = candidate
     if best is None:

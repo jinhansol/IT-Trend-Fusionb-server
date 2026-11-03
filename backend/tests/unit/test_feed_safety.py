@@ -64,6 +64,57 @@ def test_our_own_group_replaces_the_star_group():
 
 
 @pytest.mark.parametrize(
+    "agent",
+    ["Dev", "hub", "Collector", "c", "DevHub", "DevHubCollectorBot", "OtherDevHubCollector"],
+)
+def test_another_crawlers_group_never_replaces_the_star_group(agent):
+    # Before: "a in token" let "Dev", "hub" or "c" select a group meant for another bot.
+    robots = f"User-agent: {agent}\nAllow: /\n\nUser-agent: *\nDisallow: /feed/\n"
+    assert not verdict(robots, "https://a.example/feed/")
+
+
+@pytest.mark.parametrize(
+    "agent", ["DevHubCollector", "devhubcollector", "DEVHUBCOLLECTOR", "DevHubCollector/2.0"]
+)
+def test_our_product_token_matches_case_insensitively_as_a_whole(agent):
+    robots = f"User-agent: {agent}\nAllow: /feed/\n\nUser-agent: *\nDisallow: /\n"
+    assert verdict(robots, "https://a.example/feed/")
+
+
+@pytest.mark.parametrize(
+    ("rule", "url", "allowed"),
+    [
+        # A percent-encoded unreserved character is the character itself.
+        ("/private/", "https://a.example/%70rivate/rss", False),
+        ("/private/", "https://a.example/%70RIVATE/rss", True),  # paths are case-sensitive
+        ("/%70rivate/", "https://a.example/private/rss", False),
+        ("/~user/", "https://a.example/%7euser/feed", False),
+        # Reserved characters stay distinct from their encodings; hex case does not matter.
+        ("/a/b", "https://a.example/a%2Fb", True),
+        ("/a%2fb", "https://a.example/a%2Fb", False),
+        ("/q?x=1", "https://a.example/q?x=1", False),
+        ("/q?x=1", "https://a.example/q%3Fx=1", True),
+        # Non-ASCII paths match in either spelling.
+        ("/뉴스/", "https://a.example/%EB%89%B4%EC%8A%A4/rss", False),
+        ("/%EB%89%B4%EC%8A%A4/", "https://a.example/뉴스/rss", False),
+        ("/%eb%89%b4%ec%8a%a4/", "https://a.example/%EB%89%B4%EC%8A%A4/rss", False),
+        ("/뉴스/", "https://a.example/news/rss", True),
+        # Wildcards and the end anchor keep working on normalized paths.
+        ("/*/%70rivate$", "https://a.example/kr/private", False),
+        ("/*.xml$", "https://a.example/%66eed.xml", False),
+    ],
+)
+def test_paths_are_compared_after_percent_encoding_normalization(rule, url, allowed):
+    assert verdict(f"User-agent: *\nDisallow: {rule}\n", url) is allowed
+
+
+def test_the_longest_rule_counts_its_normalized_length():
+    # "/%70ublic/" and "/public/" are the same path; the Allow (same length) wins the tie.
+    robots = "User-agent: *\nDisallow: /public/\nAllow: /%70ublic/\n"
+    assert verdict(robots, "https://a.example/public/rss")
+
+
+@pytest.mark.parametrize(
     ("answer", "allowed", "reason"),
     [
         (FetchError("HTTP 404 from x", status=404), True, "unavailable (HTTP 404)"),
