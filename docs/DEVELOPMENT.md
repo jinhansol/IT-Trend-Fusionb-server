@@ -2,6 +2,8 @@
 
 개인 Windows PC에서 DevHub 2.0을 실행하고, 콘텐츠 수집을 안전하게 시험하는 방법입니다. 명령은 저장소의 `pyproject.toml`, `package.json`, `docker-compose.yml`, `.env.example`, CLI 구현(`app.content_loader`, `app.jobs`)을 기준으로 했습니다. 모든 명령은 **PowerShell** 기준입니다.
 
+> **검증 상태**: 명령은 설정 파일과 CLI 코드로 확인했고, 같은 명령의 동작은 Linux 환경에서 확인했습니다. **Windows PC에서의 실행(winget·uv 설치, PowerShell 문법, Docker Desktop)은 아직 실측하지 않았습니다.** 실행 중 다른 결과가 나오면 이 문서를 고쳐 주세요.
+
 순서: 1 설치 → 2 코드 받기 → 3 DB → 4 백엔드 → 5 콘텐츠 반영 → 6 수집 테스트 → 7 프론트엔드 → 8 테스트 → 9 종료
 
 > 이 가이드의 수집 테스트는 **접속·파싱 확인(dry-run)** 이 기본입니다. 국내 소스의 재표시 이용 조건이 아직 확정되지 않았으므로, 외부 콘텐츠를 DB에 저장하는 수집은 이용 조건을 확인한 소스에만 하세요.
@@ -19,6 +21,7 @@
 
 - Python은 따로 설치하지 않아도 됩니다. `uv sync`가 `.python-version`에 맞는 Python을 받아옵니다.
 - **정상**: 새 PowerShell 창에서 `git --version`, `uv --version`, `node -v`(v24.x), `docker version`이 모두 출력됩니다.
+- winget의 `LTS` 패키지는 설치 시점의 최신 LTS를 받으므로 24가 아닐 수 있습니다. `node -v`가 v24.x가 아니면 [nodejs.org](https://nodejs.org)의 v24 설치 파일로 바꿔 설치하세요(저장소 기준: `.nvmrc` = 24).
 - **오류**: "명령을 찾을 수 없음" → PowerShell을 새로 열어 PATH를 다시 읽습니다. Docker 명령이 실패하면 Docker Desktop 앱이 실행 중인지 확인합니다.
 - 콘솔에서 한글이 깨지면 먼저 `$env:PYTHONUTF8 = "1"`을 입력합니다.
 
