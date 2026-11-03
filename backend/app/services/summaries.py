@@ -1,7 +1,8 @@
 """E1 AI summaries the web app may show. The summary job writes content_summaries; the
 web app only reads them.
 
-A summary is shown on a card when the card's source allows summaries, the summary is
+A summary is shown on a card when the card's source allows summaries (ai_summary with
+approved terms, app/services/source_terms.py), the summary is
 done, and it was made for the same article: for News the whole URL group shares one
 summary (same url_hash), so a change of representative row keeps it.
 """
@@ -10,10 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.content import Content, ContentSource, ContentSummary
+from app.services.source_terms import ai_summary_allowed, allows_ai_summary
 
 
 def shown_summaries(db: Session, rows: list[Content], kind: str) -> dict[int, ContentSummary]:
-    hashes = {row.url_hash for row in rows if row.source.ai_summary}
+    hashes = {row.url_hash for row in rows if allows_ai_summary(row.source)}
     if not hashes:
         return {}
     found = db.execute(
@@ -24,7 +26,7 @@ def shown_summaries(db: Session, rows: list[Content], kind: str) -> dict[int, Co
             Content.url_hash.in_(hashes),
             ContentSummary.status == "done",
             ContentSummary.kind == kind,
-            ContentSource.ai_summary.is_(True),
+            ai_summary_allowed(),
         )
         .order_by(ContentSummary.updated_at.desc())
     )
@@ -34,5 +36,5 @@ def shown_summaries(db: Session, rows: list[Content], kind: str) -> dict[int, Co
     return {
         row.id: by_hash[row.url_hash]
         for row in rows
-        if row.source.ai_summary and row.url_hash in by_hash
+        if allows_ai_summary(row.source) and row.url_hash in by_hash
     }

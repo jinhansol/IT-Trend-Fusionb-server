@@ -11,7 +11,8 @@
 - Only active sources whose terms are approved are saved (app/services/source_terms.py);
   any other source is refused before anything is requested or written. A dry run may
   read any source, since it writes nothing.
-- With a RobotsPolicy, an RSS feed whose robots.txt disallows it is not requested.
+- With a RobotsPolicy, an RSS feed whose robots.txt disallows it is not requested, and
+  neither is a redirect to a path that the target host's robots.txt disallows.
 """
 
 from dataclasses import dataclass, field
@@ -21,7 +22,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.types import utc_now
 from app.integrations.http import Fetcher, FetchError
-from app.integrations.robots import RobotsPolicy
+from app.integrations.robots import RobotsPolicy, guard_redirects
 from app.integrations.sources import Adapter, Batch, SourceConfig
 from app.jobs.store import store_items
 from app.models.content import ContentSource, JobRun
@@ -115,11 +116,15 @@ class Collector:
             return list(db.scalars(query.where(ContentSource.status == "active")))
 
     def fetch(self, source: ContentSource) -> Batch:
+        adapter = self._adapters[source.adapter]
         if self._robots is not None and source.adapter == "rss" and source.feed_url:
             verdict = self._robots.check(source.feed_url)
             if not verdict.allowed:
                 raise FetchError(f"not requested: {verdict.reason}")
-        batch = self._adapters[source.adapter](self._fetcher, _config(source))
+            with guard_redirects(self._fetcher, self._robots):  # each redirect hop too
+                batch = adapter(self._fetcher, _config(source))
+        else:
+            batch = adapter(self._fetcher, _config(source))
         if batch.skipped and not batch.items:
             raise UnusableResponse(_skip_text(batch), sum(batch.skipped.values()))
         return batch

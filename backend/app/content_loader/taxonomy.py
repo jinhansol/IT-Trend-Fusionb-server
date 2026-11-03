@@ -122,7 +122,8 @@ class _SourceUse(_Strict):
     terms     unverified: read-only diagnosis only; nothing is stored or scheduled.
               approved: the terms were checked and allow collecting and showing title,
               source, date and link.
-    excerpt   also show the feed's own description (needs terms: approved).
+    excerpt   also store and show the feed's own description (needs terms: approved).
+    ai_summary (on SourceDef) is a separate permission again; approved alone allows neither.
     """
 
     terms: Literal["unverified", "approved"] = "unverified"

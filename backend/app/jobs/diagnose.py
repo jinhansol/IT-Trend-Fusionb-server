@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.content_loader.taxonomy import SourceDef
 from app.integrations.http import Fetcher, FetchError
-from app.integrations.robots import RobotsPolicy
+from app.integrations.robots import RobotsPolicy, guard_redirects
 from app.integrations.sources import parse_feed
 from app.jobs.schedule import Schedule
 from app.jobs.store import normalize_url, url_hash
@@ -103,7 +103,8 @@ def diagnose(
             report.outcome, report.detail = "not requested", verdict.reason
             continue
         try:
-            batch = parse_feed(fetcher.get(source.feed_url), FEED_ENTRIES)
+            with guard_redirects(fetcher, robots):  # each redirect hop is checked too
+                batch = parse_feed(fetcher.get(source.feed_url), FEED_ENTRIES)
         except FetchError as exc:
             report.outcome, report.detail = "failed", str(exc)
             continue

@@ -146,6 +146,9 @@ class HttpFetcher:
         allowed_hosts: frozenset[str] | None = None,
     ) -> None:
         self._max_bytes = settings.collector_max_response_bytes
+        # Called with each redirect target before it is requested; raising FetchError
+        # stops the request (app/integrations/robots.py guard_redirects).
+        self.on_redirect: Callable[[str], None] | None = None
         self._allowed_hosts = allowed_hosts
         self._sleep = sleep
         self._client = httpx.Client(
@@ -179,10 +182,11 @@ class HttpFetcher:
         try:
             for _hop in range(MAX_REDIRECTS + 1):
                 with self._client.stream("GET", target) as response:
-                    if response.status_code in _REDIRECT_STATUSES:
-                        target = self._redirect_target(response)
-                        continue
-                    return self._read(response)
+                    if response.status_code not in _REDIRECT_STATUSES:
+                        return self._read(response)
+                    target = self._redirect_target(response)
+                if self.on_redirect is not None:
+                    self.on_redirect(str(target))  # may refuse the hop (FetchError)
         except httpx.TransportError as exc:
             raise FetchError(
                 f"{type(exc).__name__} while fetching {_where(start)}", retryable=True

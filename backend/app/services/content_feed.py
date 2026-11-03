@@ -41,7 +41,7 @@ from app.schemas.content import (
     TechnologyRef,
     TrendReport,
 )
-from app.services.source_terms import shows_excerpt
+from app.services.source_terms import ai_summary_allowed, shows_excerpt
 from app.services.summaries import shown_summaries
 
 TOP_TECHNOLOGIES = 10
@@ -265,7 +265,7 @@ def _featured() -> Select:
         .join(ContentSummary, ContentSummary.content_id == Content.id)
         .where(
             _visible_sources("dev"),
-            ContentSource.ai_summary.is_(True),
+            ai_summary_allowed(),
             ContentSummary.status == "done",
             ContentSummary.kind == "dev",
         )

@@ -16,8 +16,10 @@
 #                 `collect` saves only active sources with terms: approved, and scheduled
 #                 collection (content/collect-schedule.yaml) needs the same. Unverified
 #                 sources can still be checked read-only: python -m app.jobs diagnose
-# options.excerpt true shows the feed's description on cards (needs terms: approved);
-#                 otherwise a card is title, source, date and link only.
+# options.excerpt true stores and shows the feed's description (needs terms: approved);
+#                 otherwise it is used for tagging only and a card is title, source, date
+#                 and link. ai_summary is a third, separate permission (also needs
+#                 terms: approved); approved terms alone allow neither.
 # No source below has its terms approved yet (2026-11-03): see
 # docs/devhub-2.0/DevHub-2.0-Korean-RSS-Supply.md for the checks and what is missing.
 #

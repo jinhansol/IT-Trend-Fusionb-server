@@ -3,15 +3,23 @@
 import time
 from datetime import datetime
 
+import httpx
 import pytest
 
 from app.content_loader.taxonomy import SourcesFile
-from app.integrations.http import FetchError, InsecureRedirect
-from app.integrations.robots import RobotsPolicy, check_path, parse_rules
+from app.integrations.http import FetchError, HttpFetcher, InsecureRedirect
+from app.integrations.robots import (
+    MAX_ROBOTS_BYTES,
+    RobotsPolicy,
+    check_path,
+    guard_redirects,
+    parse_rules,
+)
 from app.integrations.sources import feed_date, parse_feed
 from app.jobs.diagnose import diagnose, largest_gap
 from app.jobs.schedule import Schedule
 from tests.collect_helpers import FakeFetcher
+from tests.conftest import make_settings
 
 NOW = datetime(2026, 11, 3, 12, 0)
 
@@ -59,10 +67,15 @@ def test_our_own_group_replaces_the_star_group():
     ("answer", "allowed", "reason"),
     [
         (FetchError("HTTP 404 from x", status=404), True, "unavailable (HTTP 404)"),
-        (FetchError("HTTP 403 from x", status=403), True, "unavailable (HTTP 403)"),
-        (FetchError("HTTP 503 from x", status=503), False, "unreachable"),
+        (FetchError("HTTP 410 from x", status=410), True, "unavailable (HTTP 410)"),
+        # An access restriction or throttling is never read as permission.
+        (FetchError("HTTP 401 from x", status=401), False, "unreachable (HTTP 401)"),
+        (FetchError("HTTP 403 from x", status=403), False, "unreachable (HTTP 403)"),
+        (FetchError("HTTP 429 from x", status=429), False, "unreachable (HTTP 429)"),
+        (FetchError("HTTP 503 from x", status=503), False, "unreachable (HTTP 503)"),
         (FetchError("ConnectError while fetching x"), False, "unreachable"),
-        (InsecureRedirect("to plain http refused"), True, "redirects to plain http"),
+        (FetchError("response from x exceeds the size limit"), False, "unreachable"),
+        (InsecureRedirect("to plain http refused"), False, "redirects to plain http"),
         (b"<!DOCTYPE html><html>lander</html>", True, "not a robots.txt file"),
     ],
 )
@@ -72,12 +85,84 @@ def test_an_unreadable_robots_file(answer, allowed, reason):
     assert result.allowed is allowed and reason in result.reason
 
 
+def test_a_large_robots_file_keeps_its_rules():
+    # Before: a file over the limit was treated as "no rules" and everything was allowed.
+    comments = b"".join(b"# padding line %d\n" % i for i in range(60_000))  # ~1 MB
+    body = b"User-agent: *\nDisallow: /feed/\n" + comments + b"Disallow: /late/\n"
+    assert len(body) > MAX_ROBOTS_BYTES
+    policy = RobotsPolicy(FakeFetcher({"https://a.example/robots.txt": body}))
+    assert not policy.check("https://a.example/feed/").allowed
+    # Rules past the first MAX_ROBOTS_BYTES (>= 500 KiB, RFC 9309 2.5) may be ignored.
+    assert policy.check("https://a.example/late/").allowed
+    assert MAX_ROBOTS_BYTES >= 500 * 1024
+
+
 def test_robots_is_read_once_per_host():
     fetcher = FakeFetcher({"https://a.example/robots.txt": b"User-agent: *\nDisallow: /feed/\n"})
     policy = RobotsPolicy(fetcher)
     assert not policy.check("https://a.example/feed/").allowed
     assert policy.check("https://a.example/rss.xml").allowed
     assert [url for url, _ in fetcher.calls] == ["https://a.example/robots.txt"]
+
+
+# --- redirects -----------------------------------------------------------------------------
+
+
+class Site:
+    """MockTransport handler: url -> response; records every request."""
+
+    def __init__(self, pages: dict[str, httpx.Response]) -> None:
+        self.pages, self.requested = pages, []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requested.append(str(request.url))
+        return self.pages.get(str(request.url), httpx.Response(404))
+
+
+def moved(location: str) -> httpx.Response:
+    return httpx.Response(301, headers={"location": location})
+
+
+def http_fetcher(site: Site) -> HttpFetcher:
+    return HttpFetcher(make_settings(), httpx.MockTransport(site), sleep=lambda s: None)
+
+
+def test_a_redirect_into_a_disallowed_path_is_not_followed():
+    site = Site(
+        {
+            "https://a.example/robots.txt": httpx.Response(200, text="User-agent: *\n"),
+            "https://a.example/rss": moved("https://b.example/private/rss"),
+            "https://b.example/robots.txt": httpx.Response(
+                200, text="User-agent: *\nDisallow: /private/\n"
+            ),
+            "https://b.example/private/rss": httpx.Response(200, text="<rss/>"),
+        }
+    )
+    fetcher = http_fetcher(site)
+    robots = RobotsPolicy(fetcher)
+    assert robots.check("https://a.example/rss").allowed
+    with guard_redirects(fetcher, robots), pytest.raises(FetchError, match="Disallow /private/"):
+        fetcher.get("https://a.example/rss")
+    assert "https://b.example/private/rss" not in site.requested
+    assert fetcher.on_redirect is None  # the guard is removed afterwards
+
+
+def test_an_allowed_redirect_is_followed_and_robots_redirects_are_not_guarded():
+    site = Site(
+        {
+            "https://a.example/robots.txt": moved("https://a.example/robots-real.txt"),
+            "https://a.example/robots-real.txt": httpx.Response(
+                200, text="User-agent: *\nDisallow: /old/\n"
+            ),
+            "https://a.example/feed/": moved("https://a.example/feed"),
+            "https://a.example/feed": httpx.Response(200, text="<rss/>"),
+        }
+    )
+    fetcher = http_fetcher(site)
+    robots = RobotsPolicy(fetcher)
+    with guard_redirects(fetcher, robots):
+        assert fetcher.get("https://a.example/feed/") == b"<rss/>"
+    assert not robots.check("https://a.example/old/x").allowed  # rules came via redirect
 
 
 # --- dates and empty responses ------------------------------------------------------------
