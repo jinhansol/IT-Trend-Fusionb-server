@@ -21,7 +21,7 @@ from tests.experiment_helpers import (
     policy_for,
 )
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "content" / "experiments" / "sources.example.yaml"
+EXAMPLE = Path(__file__).resolve().parents[2] / "content" / "sources.experiment.example.yaml"
 
 
 def experiment_file(*sources):
@@ -180,9 +180,9 @@ def test_the_file_name_and_location_do_not_matter(tmp_path):
         shutil.copy(EXAMPLE, copy)
     link = tmp_path / "link.yaml"
     link.symlink_to(EXAMPLE)
-    for path in [*copies, link, Path("content/experiments/../experiments/sources.example.yaml")]:
+    for path in [*copies, link, Path("content/../content/sources.experiment.example.yaml")]:
         if not path.is_absolute():
-            path = EXAMPLE.parents[2] / path
+            path = EXAMPLE.parents[1] / path
         content = read_sources(path)
         assert {s.options["scope"] for s in content.sources} == {"example-trial"}
         db = FakeSession(FakeConnection("devhub_dev", "devhub_dev"))

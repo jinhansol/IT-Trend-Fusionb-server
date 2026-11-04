@@ -8,7 +8,7 @@ A1은 짧은 로컬 RSS 실험을 위한 **차단 장치**다. 실험을 실행�
 
 | 구분 | 일반 소스 | 실험 소스 |
 |---|---|---|
-| 파일 | `content/sources.yaml` | `content/experiments/*.yaml` (예시: `sources.example.yaml`, 실행 불가) |
+| 파일 | `content/sources.yaml` | 별도 파일 `content/sources.experiment.<이름>.yaml` (예시: `sources.experiment.example.yaml`, 실행 불가). `content/` 아래 하위 디렉터리는 학습 트랙으로 읽히므로 쓰지 않음 |
 | 표시 | `scope` 없음, 일반 slug | `options.scope` + `exp-` slug. 둘 다 있거나 둘 다 없어야 함 |
 | 허용 범위 | `status`, `options.terms`, `excerpt`, `ai_summary` | 위 조건에 더해 코드 정책 표와 모두 일치해야 함 |
 | DB | `devhub_experiment`가 아닌 DB | 설정상 DB와 실제 연결 DB 모두 정확히 `devhub_experiment` |
@@ -73,7 +73,7 @@ A1에서는 실험 DB·계정을 만들지 않았다. 아래 절차는 B1에서 
    DATABASE_URL=mysql+pymysql://devhub_experiment:<password>@127.0.0.1:3307/devhub_experiment
    ```
 3. 마이그레이션 → technologies → 실험 소스 파일 순서로 적재한다. 실험 소스 파일은 정책에 등록된 소스만 넣는다.
-4. `python -m app.jobs diagnose --sources-file content/experiments/<file>.yaml`로 소스별 1회 확인한다.
+4. `python -m app.jobs diagnose --sources-file content/sources.experiment.<이름>.yaml`로 소스별 1회 확인한다.
 
 **실험 절차에서 쓰지 않는 것:** `scripts/force_reset.py`, `scripts/seed_all.py`, `docker compose down -v`, 개발 DB 초기화.
 

@@ -1,6 +1,7 @@
 """Short local experiments: which sources may run, where, until when, and doing what.
 
-An experiment source is marked in content/experiments/*.yaml by options.scope and an
+An experiment source is marked in its own sources file (content/sources.experiment.*.yaml,
+not a subdirectory: those are learning tracks) by options.scope and an
 "exp-" slug (both or neither). The YAML only names the scope; everything that grants
 something lives in POLICIES below, in code: the one database it may use, the time
 window, and per source its exact identity (adapter, kind, language, site and feed URL),
