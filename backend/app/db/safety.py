@@ -1,6 +1,6 @@
 """Guards that confirm which database a connection actually points at."""
 
-from sqlalchemy import Engine, text
+from sqlalchemy import Connection, Engine, text
 
 from app.core.config import TEST_DATABASE_SUFFIX
 
@@ -11,7 +11,12 @@ class UnsafeDatabaseError(RuntimeError):
 
 def connected_database_name(engine: Engine) -> str:
     with engine.connect() as connection:
-        return connection.execute(text("SELECT DATABASE()")).scalar_one() or ""
+        return selected_database(connection) or ""
+
+
+def selected_database(connection: Connection) -> str | None:
+    """The database this very connection has selected (None when none is)."""
+    return connection.execute(text("SELECT DATABASE()")).scalar()
 
 
 def assert_test_database(engine: Engine, expected_name: str) -> str:
