@@ -95,6 +95,20 @@ describe("News", () => {
     expect(screen.getByRole("button", { name: "Python" }).getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("offers the same technology in Dev only while a technology is chosen", async () => {
+    restore = installFakeServer({
+      "GET /trends": () => [200, TRENDS],
+      "GET /feed-status": () => [200, STATUS],
+      "GET /news": () => [200, { items: [item(1)], page: 1, size: 12, total: 1 }],
+    });
+    renderPage(<NewsPage />);
+    await screen.findByRole("link", { name: /글 1/ });
+    expect(screen.queryByRole("link", { name: "같은 기술의 Dev 글 보기" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Python" }));
+    const toDev = await screen.findByRole("link", { name: "같은 기술의 Dev 글 보기" });
+    expect(toDev.getAttribute("href")).toBe("/dev?tech=python");
+  });
+
   it("warns when collection is delayed or has never run", async () => {
     restore = installFakeServer({
       "GET /trends": () => [200, { ...TRENDS, total: 0, fields: [], technologies: [], daily: [], daily_technologies: [] }],

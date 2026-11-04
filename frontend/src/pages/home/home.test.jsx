@@ -160,6 +160,22 @@ describe("Home", () => {
     expect(await within(region("최신 개발 아티클")).findByText("아티클 1")).toBeTruthy();
   });
 
+  it("links a news card's technology tags to News filtered by that technology", async () => {
+    const python = { slug: "python", name: "Python" };
+    restore = server({
+      news: [item(1, "파이썬 기사", NEWS_SOURCE, { technologies: [python] })],
+      dev: [dev(1, { technologies: [python] })],
+    });
+    renderHome();
+    const tag = await within(region("최신 IT 뉴스")).findByRole("link", { name: "Python 기술 기사 보기" });
+    expect(tag.getAttribute("href")).toBe("/news?tech=python");
+    await within(region("최신 개발 아티클")).findByRole("link", { name: /아티클 1/ });
+    // Dev rows keep their plain labels (link-only board rows).
+    expect(within(region("최신 개발 아티클")).queryByRole("link", { name: /기술 기사 보기/ })).toBeNull();
+    tag.click();
+    expect((await screen.findByTestId("location")).textContent).toBe("/news?tech=python");
+  });
+
   it("sends old filtered Home links (/?tech=) to News", () => {
     restore = server({ news: [], dev: [] });
     renderHome("/?tech=python");
