@@ -151,16 +151,102 @@ def test_a_slug_held_by_another_source_is_refused(catalog):
     assert rows(catalog, "SELECT COUNT(*) FROM contents")[0][0] == 0
 
 
+EXPIRED = datetime(2026, 10, 23, tzinfo=UTC)
+COUNTS = (
+    "SELECT (SELECT COUNT(*) FROM content_sources), (SELECT COUNT(*) FROM contents),"
+    " (SELECT COUNT(*) FROM content_technologies)"
+)
+
+
+def nothing_left(engine) -> bool:
+    return tuple(rows(engine, COUNTS)[0]) == (0, 0, 0)
+
+
 def test_expiry_between_items_rolls_back_every_write(catalog):
-    """The window is checked before each item's first write: the second item finds the
-    trial expired, and the first item's flushed rows are rolled back with it."""
-    times = iter([INSIDE, datetime(2026, 10, 23, tzinfo=UTC)])
-    with pytest.raises(trial.TrialRefused) as refused:
-        save(catalog, lambda connection: None, clock=lambda: next(times))
+    """The first item is written and flushed, then the window ends before the second:
+    the refusal rolls the first item's rows back with the rest of the transaction."""
+    items = prepared()
+    seen = []  # (sources, contents, links) as the writing session sees them, per check
+    with create_session_factory(catalog)() as db:
+
+        def clock():
+            seen.append(tuple(db.execute(text(COUNTS)).one()))
+            return INSIDE if len(seen) < 3 else EXPIRED  # 1: after the connection check
+
+        with pytest.raises(trial.TrialRefused) as refused, db.begin():
+            trial.save(db, manifest(), items, connection_check=lambda c: None, clock=clock)
+
     assert refused.value.code == "trial_expired"
-    assert rows(catalog, "SELECT COUNT(*) FROM content_sources")[0][0] == 0
-    assert rows(catalog, "SELECT COUNT(*) FROM contents")[0][0] == 0
-    assert rows(catalog, "SELECT COUNT(*) FROM content_technologies")[0][0] == 0
+    # checks: after the connection check, before item 1, before item 2 (expired)
+    assert seen[:2] == [(0, 0, 0), (0, 0, 0)]
+    assert seen[2][:2] == (1, 1) and seen[2][2] >= 1  # item 1 flushed, tagged
+    assert nothing_left(catalog)
+
+
+def trial_routes() -> dict:
+    return {
+        "https://cloud.example.invalid/robots.txt": ALLOW,
+        "https://devlog.example.invalid/robots.txt": ALLOW,
+        "https://cloud.example.invalid/more/notices/1001": (FIXTURES / "notice.html").read_bytes(),
+        "https://devlog.example.invalid/feed.xml": (FIXTURES / "feed.atom.xml").read_bytes(),
+    }
+
+
+def run_trial(engine, expire_at_call: int | None, seen: list | None = None):
+    """trial.run on the test database with the connection check replaced; the clock
+    answers INSIDE until call `expire_at_call` (1-based), then EXPIRED. `seen` collects
+    (sources, contents, links) as the writing session sees them at each clock call
+    once the session is open. Returns (report, clock calls)."""
+    factory = create_session_factory(engine)
+    opened = []
+
+    def sessions():
+        opened.append(factory())
+        return opened[-1]
+
+    calls = []
+    seen = seen if seen is not None else []
+
+    def clock():
+        calls.append(1)
+        if opened:
+            seen.append(tuple(opened[-1].execute(text(COUNTS)).one()))
+        expired = expire_at_call is not None and len(calls) >= expire_at_call
+        return EXPIRED if expired else INSIDE
+
+    result = trial.run(
+        manifest(),
+        FakeFetcher(trial_routes()),
+        engine=engine,
+        sessions=sessions,
+        clock=clock,
+        connection_check=lambda connection: None,
+    )
+    return result, len(calls)
+
+
+# Clock calls in a saving run: 1 start, 4 requests, 1 after the connection check,
+# 2 before each item's first write, 1 after the last save (before the commit).
+LAST_CALL = 9
+
+
+def test_a_run_inside_the_window_commits(catalog):
+    report, calls = run_trial(catalog, expire_at_call=None)
+    assert calls == LAST_CALL
+    assert [r.inserted for r in report.stored] == [1, 1]
+    assert tuple(rows(catalog, COUNTS)[0])[:2] == (2, 2)
+
+
+def test_expiry_right_after_the_last_save_commits_nothing(catalog):
+    """Both items are saved and flushed; the window ends at the check after the last
+    save, and the rollback leaves no source, content or technology link."""
+    seen = []
+    with pytest.raises(trial.TrialRefused) as refused:
+        run_trial(catalog, expire_at_call=LAST_CALL, seen=seen)
+    assert refused.value.code == "trial_expired"
+    sources, contents, links = seen[-1]  # at the last check, before the rollback
+    assert (sources, contents) == (2, 2) and links >= 1
+    assert nothing_left(catalog)
 
 
 def test_expiry_before_the_first_write_writes_nothing(catalog):

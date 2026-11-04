@@ -815,3 +815,69 @@ def test_save_checks_the_window_before_the_first_write():
 def test_the_local_dev_test_server_may_host_the_experiment_database():
     trial.check_connection(FakeConnection(GOOD_URL.replace(":3308", ":3307")))
     trial.check_connection(FakeConnection(GOOD_URL.replace(":3308", "")))
+
+
+# --- robots.txt answered with markup, with or without a BOM ---------------------------
+
+BOM = b"\xef\xbb\xbf"
+BOM_HTML = BOM + b"<!DOCTYPE html><html><body>Please enable JavaScript</body></html>"
+BODY_PAGE = b"<body><h1>Access denied</h1><p>Request blocked.</p></body>"
+
+
+@pytest.mark.parametrize("robots", [BOM_HTML, BODY_PAGE], ids=["bom-html", "body-page"])
+def test_a_markup_robots_txt_is_refused_before_the_target(robots):
+    fetcher = FakeFetcher(routes(**{CLOUD_ROBOTS: robots}))
+    with pytest.raises(trial.TrialRefused) as refused:
+        fetch(manifest(), fetcher)
+    assert refused.value.code == "robots_refused"
+    assert [url for url, _ in fetcher.calls] == [CLOUD_ROBOTS]  # no target request
+
+
+@pytest.mark.parametrize(
+    "robots",
+    [BOM + b"  \n" + BODY_PAGE, b"\n\n  " + BOM_HTML[3:], b"<?xml version='1.0'?><x/>"],
+    ids=["bom-space-body", "space-html", "xml"],
+)
+def test_markup_after_whitespace_is_refused_too(robots):
+    fetcher = FakeFetcher(routes(**{CLOUD_ROBOTS: robots}))
+    with pytest.raises(trial.TrialRefused):
+        fetch(manifest(), fetcher)
+    assert NOTICE_URL not in [url for url, _ in fetcher.calls]
+
+
+@pytest.mark.parametrize(
+    "robots",
+    [b"", BOM, b"\n", BOM + b"# no rules\n"],
+    ids=["empty", "bom", "newline", "bom-comment"],
+)
+def test_an_empty_robots_file_still_allows(robots):
+    fetcher = FakeFetcher(routes(**{CLOUD_ROBOTS: robots}))
+    prepared, used = fetch(manifest(), fetcher)
+    assert len(prepared) == 2 and used == 4
+
+
+def test_a_bom_does_not_hide_the_first_rule_in_a_trial():
+    """With the BOM left in, the first line reads as an unknown key and its rules apply
+    to nobody; the trial drops the BOM, so the Disallow is honoured."""
+    robots = BOM + b"User-agent: *\nDisallow: /more/\n"
+    fetcher = FakeFetcher(routes(**{CLOUD_ROBOTS: robots}))
+    with pytest.raises(trial.TrialRefused) as refused:
+        fetch(manifest(), fetcher)
+    assert refused.value.code == "robots_refused"
+    assert [url for url, _ in fetcher.calls] == [CLOUD_ROBOTS]
+
+
+@pytest.mark.parametrize(
+    ("robots", "allowed"),
+    [
+        (BOM_HTML, True),  # no rules found: allowed, as before
+        (BODY_PAGE, True),
+        (b"", True),
+        (b"User-agent: *\nDisallow: /more/\n", False),
+    ],
+    ids=["bom-html", "body-page", "empty", "disallow"],
+)
+def test_the_collectors_robots_policy_is_unchanged_for_these_inputs(robots, allowed):
+    from app.integrations.robots import RobotsPolicy
+
+    assert RobotsPolicy(FakeFetcher({CLOUD_ROBOTS: robots})).check(NOTICE_URL).allowed is allowed

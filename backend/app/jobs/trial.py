@@ -10,7 +10,8 @@ Order, each step refusing before the next:
 2. unless --dry-run, the database is checked (also before any request);
 3. per item: robots.txt, then one request for the page or feed; no redirects, one
    attempt per request and at most two requests per item. Unlike the collector, a
-   robots.txt that cannot be read as rules (any error status, an HTML page) refuses;
+   robots.txt that cannot be read as rules (any error status, an HTML or other markup
+   page, with or without a UTF-8 BOM) refuses before the target is requested;
    a feed answered with an HTML page fails. The window is checked again before each
    request;
 4. only the allowed fields of the one target entry are kept (title, original URL,
@@ -20,8 +21,9 @@ Order, each step refusing before the next:
    SELECT DATABASE() and CURRENT_USER() before autoflush or any write: configured and
    actual database devhub_experiment, account devhub_experiment (the server may be the
    local dev/test one; the account's grants keep it to this database). The window is
-   checked again before the first write of each item. Then store_items saves (a stored
-   URL is updated, never duplicated).
+   checked again before the first write of each item and once more after the last
+   save, before the commit. Then store_items saves (a stored URL is updated, never
+   duplicated).
 
 Trial source rows are created paused with terms: unverified, so `collect` never picks
 them up and the general gate stays as it is.
@@ -199,10 +201,34 @@ def check_connection(connection: Connection) -> None:
 # --- network -----------------------------------------------------------------------------
 
 
+_BOM = b"\xef\xbb\xbf"
+
+
+class _RobotsBody:
+    """The fetcher as the trial's robots policy sees it: a UTF-8 BOM is dropped so the
+    first rule line is read, and a body that starts with markup (`<!doctype`, `<html>`,
+    `<body>`, any tag, after a BOM or whitespace) is no robots.txt: it fails, which the
+    strict policy below turns into a refusal."""
+
+    def __init__(self, fetcher) -> None:
+        self._fetcher = fetcher
+
+    def get(self, url: str, params=None) -> bytes:
+        body = self._fetcher.get(url, params).lstrip()
+        if body.startswith(_BOM):
+            body = body[len(_BOM) :]
+        if body.lstrip().startswith(b"<"):
+            raise FetchError("robots.txt: a markup page, not rules")
+        return body
+
+
 class _StrictRobots(RobotsPolicy):
     """The collector's robots.txt policy, except that no rules read means refused: an
-    error status (including 404) or an HTML page in place of robots.txt is not taken as
+    error status (including 404) or a markup page in place of robots.txt is not taken as
     permission in a trial. The collector's own policy is unchanged."""
+
+    def __init__(self, fetcher) -> None:
+        super().__init__(_RobotsBody(fetcher))
 
     def _read(self, host: str) -> _Rules:
         found = super()._read(host)
@@ -353,12 +379,13 @@ def run(
     sessions=None,
     clock: Clock = utc_now,
     dry_run: bool = False,
+    connection_check: Callable[[Connection], None] = check_connection,
 ) -> TrialReport:
     check_window(manifest, clock())
     if not dry_run:
         try:
             with engine.connect() as connection:
-                check_connection(connection)
+                connection_check(connection)
         except TrialRefused:
             raise
         except Exception:
@@ -367,5 +394,8 @@ def run(
     if dry_run:
         return TrialReport(prepared, None, requests)
     with sessions() as db, db.begin():
-        stored = save(db, manifest, prepared, clock=clock)
+        stored = save(db, manifest, prepared, connection_check=connection_check, clock=clock)
+        # Raising here, inside begin(), rolls the whole save back: nothing is committed
+        # once the window has ended.
+        check_window(manifest, clock())
     return TrialReport(prepared, stored, requests)
