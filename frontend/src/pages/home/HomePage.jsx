@@ -14,7 +14,10 @@ function asList(resource) {
   return { status: resource.status, items: resource.data?.items ?? [], hasMore: false };
 }
 
-function LatestSection({ id, title, description, moreTo, moreLabel, resource, emptyText, linkOnly = false }) {
+/** A news card's technology tag opens News filtered by that technology. */
+const newsByTech = (slug) => `/news?tech=${encodeURIComponent(slug)}`;
+
+function LatestSection({ id, title, description, moreTo, moreLabel, resource, emptyText, linkOnly = false, techHref }) {
   return (
     <section aria-labelledby={id} className="mt-12">
       <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
@@ -29,7 +32,7 @@ function LatestSection({ id, title, description, moreTo, moreLabel, resource, em
           <ArrowRight size={14} aria-hidden="true" />
         </Link>
       </div>
-      <FeedList list={asList(resource)} emptyText={emptyText} linkOnly={linkOnly} />
+      <FeedList list={asList(resource)} emptyText={emptyText} linkOnly={linkOnly} techHref={techHref} />
     </section>
   );
 }
@@ -80,6 +83,7 @@ function HomeSections() {
         moreLabel="전체 뉴스 보기"
         resource={news}
         emptyText="아직 수집된 기사가 없습니다."
+        techHref={newsByTech}
       />
       <LatestSection
         id="home-dev"

@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import ContentCard from "./ContentCard";
 
@@ -27,6 +28,25 @@ describe("ContentCard", () => {
     expect(screen.getByText(/홍길동/)).toBeTruthy();
     expect(screen.getByText(ITEM.excerpt)).toBeTruthy();
     expect(screen.getByText("클라우드")).toBeTruthy();
+  });
+
+  it("shows tags as plain labels unless a techHref is given", () => {
+    render(<ContentCard item={ITEM} />);
+    expect(screen.getAllByRole("link")).toHaveLength(1); // the title only
+  });
+
+  it("links each tag in the app when techHref is given, apart from the original link", () => {
+    render(
+      <MemoryRouter>
+        <ContentCard item={ITEM} techHref={(slug) => `/news?tech=${slug}`} />
+      </MemoryRouter>
+    );
+    const tag = screen.getByRole("link", { name: "클라우드 기술 기사 보기" });
+    expect(tag.getAttribute("href")).toBe("/news?tech=cloud");
+    expect(tag.getAttribute("target")).toBeNull();
+    const title = screen.getByRole("link", { name: new RegExp(ITEM.title) });
+    expect(title.getAttribute("href")).toBe(ITEM.url);
+    expect(title.contains(tag)).toBe(false); // never nested in the original link
   });
 
   it("never shows a translation, even if one is sent (translation was dropped)", () => {

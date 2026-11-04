@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import { fetchNews, fetchTrends } from "../../api/content";
 import { useApiResource } from "../../hooks/useApiResource";
 import { usePagedList } from "../../hooks/usePagedList";
@@ -30,6 +32,17 @@ export default function NewsPage() {
         <div className="mb-6">
           <TechFilter technologies={[...report.fields, ...report.technologies].slice(0, 12)} value={tech} onChange={setTech} />
         </div>
+      )}
+      {tech && (
+        <p className="mb-4">
+          <Link
+            to={`/dev?tech=${encodeURIComponent(tech)}`}
+            className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:underline"
+          >
+            같은 기술의 Dev 글 보기
+            <ArrowRight size={14} aria-hidden="true" />
+          </Link>
+        </p>
       )}
       <RelatedLearning tech={tech} />
       <FeedList list={news} emptyText={tech ? "이 기술에 관한 기사가 아직 없습니다." : "아직 수집된 기사가 없습니다."} />
