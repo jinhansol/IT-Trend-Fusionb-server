@@ -46,12 +46,22 @@ class StoreResult:
 
 
 def _tag(db: Session, content: Content, tagger: Tagger, excerpt: str | None) -> None:
+    """Replace the item's rule tags. The collector owns only method "rule": a tag set
+    another way (e.g. "manual") is never deleted or overwritten, and a rule match for
+    that same technology is skipped, since (content_id, technology_id) is the key."""
     db.execute(
         delete(ContentTechnology).where(
             ContentTechnology.content_id == content.id, ContentTechnology.method == "rule"
         )
     )
-    for tech_id in sorted(tagger.match(content.title, excerpt, content.source_tags)):
+    kept = set(
+        db.scalars(
+            select(ContentTechnology.technology_id).where(
+                ContentTechnology.content_id == content.id
+            )
+        )
+    )
+    for tech_id in sorted(tagger.match(content.title, excerpt, content.source_tags) - kept):
         db.add(ContentTechnology(content_id=content.id, technology_id=tech_id, method="rule"))
 
 
