@@ -4,6 +4,7 @@
     uv run python -m app.jobs collect --source bloter    one or more sources (same rule)
     uv run python -m app.jobs collect --dry-run          fetch and parse only, save nothing
     uv run python -m app.jobs diagnose [--source SLUG]   read-only feed check from sources.yaml
+    uv run python -m app.jobs trial MANIFEST [--dry-run] a manual 48-hour trial (app/jobs/trial.py)
     uv run python -m app.jobs collect --group dev        the scheduled list for a group
     uv run python -m app.jobs crontab                    print the cron lines for the groups
     uv run python -m app.jobs collect-report --days 7    runs and new items per source
@@ -27,19 +28,20 @@ robots.py). diagnose needs no database: it reads content/sources.yaml.
 import argparse
 import shutil
 import sys
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import text as sql
 
 from app.content_loader.taxonomy import read_sources
 from app.core.config import get_settings
-from app.db.session import create_db_engine
+from app.db.session import create_db_engine, create_session_factory
 from app.db.types import utc_now
 from app.integrations.gemini import GeminiNotConfigured, gemini_client
-from app.integrations.http import HttpFetcher
+from app.integrations.http import FetchError, HttpFetcher
 from app.integrations.robots import RobotsPolicy
 from app.integrations.sources import adapters
+from app.jobs import trial as trial_mod
 from app.jobs.article_bodies import WEBDEV_HOSTS, finished_ids, webdev_bodies
 from app.jobs.diagnose import diagnose
 from app.jobs.runner import Collector, UnknownSource
@@ -71,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     picked.add_argument("--group", choices=GROUPS)
     check.add_argument("--sources-file", type=Path, default=SOURCES_FILE, help=argparse.SUPPRESS)
     check.add_argument("--schedule", type=Path, default=SCHEDULE_FILE, help=argparse.SUPPRESS)
+    trial = commands.add_parser("trial", help="manual trial: one notice page and one Atom entry")
+    trial.add_argument("manifest", type=Path)
+    trial.add_argument("--dry-run", action="store_true", help="fetch and parse, no database")
     report = commands.add_parser("collect-report", help="runs and new items per source")
     report.add_argument("--days", type=int, default=7)
     job = commands.add_parser("summarize", help="summarize articles with Gemini")
@@ -90,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
     settings = get_settings()
     if args.command == "diagnose":
         return _diagnose(args, settings)
+    if args.command == "trial":
+        return _trial(args, settings)
     if args.command == "collect-report":
         return _report(settings, args.days)
     if args.command != "collect":
@@ -161,6 +168,42 @@ def _diagnose(args, settings) -> int:
         "(read-only, nothing saved)"
     )
     return 1 if failed else 0
+
+
+def _trial(args, settings) -> int:
+    """Manifest and window first, then the database, then the network (trial.py)."""
+    try:
+        manifest = trial_mod.read_manifest(args.manifest)
+        trial_mod.check_window(manifest, datetime.now(UTC))
+    except trial_mod.TrialRefused as exc:
+        print(f"Refused: {exc}; nothing was requested or saved", file=sys.stderr)
+        return 2
+    engine = None if args.dry_run else create_db_engine(settings)
+    fetcher = HttpFetcher(settings, allowed_hosts=trial_mod.input_hosts(manifest), max_attempts=1)
+    try:
+        report = trial_mod.run(
+            manifest,
+            fetcher,
+            engine=engine,
+            sessions=create_session_factory(engine) if engine else None,
+            dry_run=args.dry_run,
+        )
+    except trial_mod.TrialRefused as exc:
+        print(f"Refused: {exc}", file=sys.stderr)
+        return 2
+    except FetchError as exc:
+        print(f"Failed: {exc}; nothing was saved", file=sys.stderr)
+        return 1
+    finally:
+        fetcher.close()
+        if engine is not None:
+            engine.dispose()
+    for index, (item, collected) in enumerate(report.items):
+        stored = report.stored[index] if report.stored else None
+        outcome = f"new {stored.inserted}, updated {stored.updated}" if stored else "dry run"
+        print(f"{item.source.slug:<24} {item.kind:<12} {collected.url} — {outcome}")
+    print(f"trial {manifest.trial} — {report.requests} requests, expires {manifest.expires_at}")
+    return 0
 
 
 _REPORT = sql(

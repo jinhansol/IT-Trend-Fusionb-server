@@ -144,8 +144,10 @@ class HttpFetcher:
         transport: httpx.BaseTransport | None = None,
         sleep: Callable[[float], None] = time.sleep,
         allowed_hosts: frozenset[str] | None = None,
+        max_attempts: int = MAX_ATTEMPTS,
     ) -> None:
         self._max_bytes = settings.collector_max_response_bytes
+        self._max_attempts = max(1, max_attempts)
         # Called with each redirect target before it is requested; raising FetchError
         # stops the request (app/integrations/robots.py guard_redirects).
         self.on_redirect: Callable[[str], None] | None = None
@@ -161,11 +163,11 @@ class HttpFetcher:
         )
 
     def get(self, url: str, params: dict | None = None) -> bytes:
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        for attempt in range(1, self._max_attempts + 1):
             try:
                 return self._get_once(url, params)
             except FetchError as exc:
-                if attempt == MAX_ATTEMPTS or not exc.retryable:
+                if attempt == self._max_attempts or not exc.retryable:
                     raise
                 wait = exc.retry_after
                 self._sleep(BACKOFF_SECONDS[attempt - 1] if wait is None else wait)

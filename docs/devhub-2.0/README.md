@@ -7,6 +7,7 @@
 | `DevHub-2.0-Phase5-Status-and-Integration-Report.md` | Phase 5(Home·Dev 수집) 구현 현황, Career 연계·개인화 가능성 |
 | `DevHub-2.0-A-Policy-Technical-Impact-Report.md` | A안(사용자 상태·개인화) 기술 영향 감사 |
 | `DevHub-2.0-A-v0.2-Architecture-Validation.md` | A안 v0.2 설계 검증 (판정: CONDITIONAL GO) |
+| `DevHub-2.0-Manual-Trial.md` | 수동 실험 명령(`app.jobs trial`) 실행 안내: 공지 1건·Atom 글 1건, 48시간, 별도 DB |
 
 ## A안 v0.2 확정 결정 (2026-10-28)
 

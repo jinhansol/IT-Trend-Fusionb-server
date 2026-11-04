@@ -1,0 +1,19 @@
+# EXAMPLE ONLY (synthetic, .invalid hosts). A real manifest lives outside the repository.
+# python -m app.jobs trial <manifest> [--dry-run]   — see docs/devhub-2.0/DevHub-2.0-Manual-Trial.md
+trial: kafka-pair-example
+database: devhub_experiment
+created_at: "2026-10-21T00:00:00Z"
+expires_at: "2026-10-23T00:00:00Z"   # at most 48 hours after created_at
+items:
+  - kind: notice_page
+    source: { slug: trial-example-cloud, name: 예시 클라우드 공지, kind: news, site_url: "https://cloud.example.invalid/" }
+    input_url: "https://cloud.example.invalid/more/notices/1001"
+    target_url: "https://cloud.example.invalid/more/notices/1001"
+    fields: [title, url, published_at, source]
+    basis: "Synthetic example: write the reviewed basis (document, clause, date checked) here."
+  - kind: atom_entry
+    source: { slug: trial-example-devlog, name: Example Devlog, kind: blog, site_url: "https://devlog.example.invalid/", channel: trial-devlog, channel_name: Example Devlog }
+    input_url: "https://devlog.example.invalid/feed.xml"
+    target_url: "https://devlog.example.invalid/posts/kafka-delivery/"
+    fields: [title, url, published_at, source, author]
+    basis: "Synthetic example: e.g. this one post's CC BY 4.0 notice, author and link shown."
