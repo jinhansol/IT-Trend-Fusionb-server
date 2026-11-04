@@ -7,6 +7,7 @@ sources up.
 """
 
 import copy
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ pytestmark = pytest.mark.integration
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "trial"
 ALLOW = b"User-agent: *\nAllow: /\n"
+INSIDE = datetime(2026, 10, 22, tzinfo=UTC)  # inside the example window
 
 
 def manifest() -> trial.Manifest:
@@ -41,7 +43,7 @@ def prepared():
             "https://devlog.example.invalid/feed.xml": (FIXTURES / "feed.atom.xml").read_bytes(),
         }
     )
-    return trial.fetch_items(manifest(), fetcher)[0]
+    return trial.fetch_items(manifest(), fetcher, lambda: INSIDE)[0]
 
 
 def rows(engine, sql: str):
@@ -60,9 +62,10 @@ def catalog(clean_db):
     return clean_db
 
 
-def save(engine, check=trial.check_connection):
+def save(engine, check=trial.check_connection, clock=lambda: INSIDE):
+    items = prepared()
     with create_session_factory(engine)() as db, db.begin():
-        return trial.save(db, manifest(), prepared(), connection_check=check)
+        return trial.save(db, manifest(), items, connection_check=check, clock=clock)
 
 
 def test_the_real_check_refuses_the_test_database_and_nothing_is_written(catalog):
@@ -146,3 +149,23 @@ def test_a_slug_held_by_another_source_is_refused(catalog):
         save(catalog, lambda connection: None)
     assert refused.value.code == "source_slug_belongs_to_something_else"
     assert rows(catalog, "SELECT COUNT(*) FROM contents")[0][0] == 0
+
+
+def test_expiry_between_items_rolls_back_every_write(catalog):
+    """The window is checked before each item's first write: the second item finds the
+    trial expired, and the first item's flushed rows are rolled back with it."""
+    times = iter([INSIDE, datetime(2026, 10, 23, tzinfo=UTC)])
+    with pytest.raises(trial.TrialRefused) as refused:
+        save(catalog, lambda connection: None, clock=lambda: next(times))
+    assert refused.value.code == "trial_expired"
+    assert rows(catalog, "SELECT COUNT(*) FROM content_sources")[0][0] == 0
+    assert rows(catalog, "SELECT COUNT(*) FROM contents")[0][0] == 0
+    assert rows(catalog, "SELECT COUNT(*) FROM content_technologies")[0][0] == 0
+
+
+def test_expiry_before_the_first_write_writes_nothing(catalog):
+    expired = datetime(2026, 10, 23, tzinfo=UTC) + timedelta(seconds=1)
+    with pytest.raises(trial.TrialRefused) as refused:
+        save(catalog, lambda connection: None, clock=lambda: expired)
+    assert refused.value.code == "trial_expired"
+    assert rows(catalog, "SELECT COUNT(*) FROM content_sources")[0][0] == 0

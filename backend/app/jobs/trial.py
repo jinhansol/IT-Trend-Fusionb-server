@@ -9,34 +9,40 @@ Order, each step refusing before the next:
 1. the manifest is valid and now is inside its window (no request otherwise);
 2. unless --dry-run, the database is checked (also before any request);
 3. per item: robots.txt, then one request for the page or feed; no redirects, one
-   attempt per request and at most two requests per item;
+   attempt per request and at most two requests per item. Unlike the collector, a
+   robots.txt that cannot be read as rules (any error status, an HTML page) refuses;
+   a feed answered with an HTML page fails. The window is checked again before each
+   request;
 4. only the allowed fields of the one target entry are kept (title, original URL,
    source, publish time, optionally author and source tags); the feed's other entries,
    descriptions, bodies and images are dropped in memory and never logged;
 5. in the write transaction, the connection that will write is checked again with
    SELECT DATABASE() and CURRENT_USER() before autoflush or any write: configured and
-   actual database devhub_experiment, account devhub_experiment, not the shared dev/test
-   instance. Then store_items saves (a stored URL is updated, never duplicated).
+   actual database devhub_experiment, account devhub_experiment (the server may be the
+   local dev/test one; the account's grants keep it to this database). The window is
+   checked again before the first write of each item. Then store_items saves (a stored
+   URL is updated, never duplicated).
 
 Trial source rows are created paused with terms: unverified, so `collect` never picks
 them up and the general gate stays as it is.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
+import httpx
 import yaml
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import Connection, func, select, text
 from sqlalchemy.orm import Session
 
-from app.integrations.http import FetchError
+from app.integrations.http import FetchError, check_address
 from app.integrations.notice_page import notice_id_from, parse_notice
-from app.integrations.robots import RobotsPolicy
+from app.integrations.robots import RobotsPolicy, _Rules
 from app.integrations.sources import CollectedItem, parse_feed
 from app.jobs.store import StoreResult, normalize_url, store_items
 from app.models.content import ContentSource
@@ -44,7 +50,6 @@ from app.services.tagging import Tagger, load_tagger
 
 DATABASE = "devhub_experiment"
 ACCOUNT = "devhub_experiment"
-SHARED_INSTANCE_PORT = 3307  # docker-compose's devhub_dev / devhub_test instance
 MAX_WINDOW = timedelta(hours=48)
 REQUESTS_PER_ITEM = 2  # robots.txt + the page or feed
 FEED_ENTRIES = 1000  # read the whole feed to find the one entry
@@ -66,9 +71,22 @@ class _Strict(BaseModel):
 
 
 def _https(url: str) -> str:
+    """A public https URL on the default port, without credentials or odd characters."""
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in url):
+        raise ValueError("URLs must not contain spaces or control characters")
     parts = urlsplit(url)
     if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
         raise ValueError("URLs must be https, with a host and without credentials")
+    try:
+        port = parts.port
+    except ValueError:
+        raise ValueError("URLs must not carry an invalid port") from None
+    if port not in (None, 443):
+        raise ValueError("URLs must use the default https port")
+    try:
+        check_address(httpx.URL(url))  # localhost and non-public IP literals
+    except (httpx.InvalidURL, FetchError):
+        raise ValueError("URLs must name a public host") from None
     return url
 
 
@@ -145,6 +163,13 @@ def read_manifest(path: Path) -> Manifest:
         raise TrialRefused("invalid_manifest", type(exc).__name__) from None
 
 
+Clock = Callable[[], datetime]
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
 def check_window(manifest: Manifest, now: datetime) -> None:
     if now < manifest.created_at:
         raise TrialRefused("trial_not_started")
@@ -156,8 +181,9 @@ def check_window(manifest: Manifest, now: datetime) -> None:
 
 
 def check_connection(connection: Connection) -> None:
-    """Configured and actual database and account must be the trial's own; the shared
-    dev/test instance is refused. Reason codes only, never the URL."""
+    """Configured and actual database and account must be the trial's own. The server
+    may be shared (e.g. the local dev/test one): the dedicated account's grants, checked
+    by hand with SHOW GRANTS, keep it to devhub_experiment. Reason codes only."""
     url = connection.engine.url
     try:
         actual_db = connection.execute(text("SELECT DATABASE()")).scalar()
@@ -168,18 +194,33 @@ def check_connection(connection: Connection) -> None:
         raise TrialRefused("not_the_experiment_database")
     if url.username != ACCOUNT or str(actual_user or "").split("@")[0] != ACCOUNT:
         raise TrialRefused("not_the_experiment_account")
-    if (url.port or 3306) == SHARED_INSTANCE_PORT:
-        raise TrialRefused("shared_dev_test_instance")
 
 
 # --- network -----------------------------------------------------------------------------
 
 
-class _Budget:
-    """At most `limit` requests through the wrapped fetcher; redirects are refused."""
+class _StrictRobots(RobotsPolicy):
+    """The collector's robots.txt policy, except that no rules read means refused: an
+    error status (including 404) or an HTML page in place of robots.txt is not taken as
+    permission in a trial. The collector's own policy is unchanged."""
 
-    def __init__(self, fetcher, limit: int) -> None:
+    def _read(self, host: str) -> _Rules:
+        found = super()._read(host)
+        return replace(found, allowed=False) if found.rules is None else found
+
+
+def _looks_like_html_page(body: bytes) -> bool:
+    head = body.lstrip()[:64].lower()
+    return head.startswith((b"<!doctype html", b"<html"))
+
+
+class _Budget:
+    """At most `limit` requests through the wrapped fetcher; redirects are refused, and
+    `before_request` (the window check) runs before each one."""
+
+    def __init__(self, fetcher, limit: int, before_request: Callable[[], None]) -> None:
         self._fetcher, self.limit, self.used = fetcher, limit, 0
+        self._before_request = before_request
         if hasattr(fetcher, "on_redirect"):
             fetcher.on_redirect = self._refuse_redirect
 
@@ -190,6 +231,7 @@ class _Budget:
     def get(self, url: str, params=None) -> bytes:
         if self.used >= self.limit:
             raise TrialRefused("request_limit_reached")
+        self._before_request()
         self.used += 1
         return self._fetcher.get(url, params)
 
@@ -201,6 +243,8 @@ def _collected(item: TrialItem, raw: bytes) -> CollectedItem:
     if item.kind == "notice_page":
         title, published = parse_notice(raw, notice_id_from(item.target_url))
         return CollectedItem(url=target, title=title, published_at=published)
+    if _looks_like_html_page(raw):
+        raise FetchError("feed: an HTML page was returned instead of the feed")
     entries = [e for e in parse_feed(raw, FEED_ENTRIES).items if normalize_url(e.url) == target]
     if len(entries) != 1:
         raise FetchError(f"feed: expected exactly one entry for the target, found {len(entries)}")
@@ -221,10 +265,16 @@ def input_hosts(manifest: Manifest) -> frozenset[str]:
     return frozenset(urlsplit(i.input_url).hostname for i in manifest.items)
 
 
-def fetch_items(manifest: Manifest, fetcher) -> tuple[list[tuple[TrialItem, CollectedItem]], int]:
+def fetch_items(
+    manifest: Manifest, fetcher, clock: Clock = utc_now
+) -> tuple[list[tuple[TrialItem, CollectedItem]], int]:
     """(items with their allowed fields, requests made)."""
-    budget = _Budget(fetcher, REQUESTS_PER_ITEM * len(manifest.items))
-    robots = RobotsPolicy(budget)
+    budget = _Budget(
+        fetcher,
+        REQUESTS_PER_ITEM * len(manifest.items),
+        before_request=lambda: check_window(manifest, clock()),
+    )
+    robots = _StrictRobots(budget)
     prepared = []
     for item in manifest.items:
         verdict = robots.check(item.input_url)
@@ -272,13 +322,18 @@ def save(
     prepared: list[tuple[TrialItem, CollectedItem]],
     tagger_for: Callable[[Session], Tagger] = load_tagger,
     connection_check: Callable[[Connection], None] = check_connection,
+    clock: Clock = utc_now,
 ) -> list[StoreResult]:
-    """In the caller's transaction: check the writing connection first, then store."""
+    """In the caller's transaction: check the writing connection first, then store. The
+    window is checked before each item's first write; a refusal there rolls back the
+    caller's transaction, so nothing of the trial is kept."""
     with db.no_autoflush:
         connection_check(db.connection())
+        check_window(manifest, clock())  # before any other statement in the transaction
     tagger = tagger_for(db)
     results = []
     for item, collected in prepared:
+        check_window(manifest, clock())
         source = _source_row(db, manifest, item)
         results.append(store_items(db, source, [collected], tagger))
     return results
@@ -296,10 +351,10 @@ def run(
     fetcher,
     engine=None,
     sessions=None,
-    now: datetime | None = None,
+    clock: Clock = utc_now,
     dry_run: bool = False,
 ) -> TrialReport:
-    check_window(manifest, now or datetime.now(UTC))
+    check_window(manifest, clock())
     if not dry_run:
         try:
             with engine.connect() as connection:
@@ -308,9 +363,9 @@ def run(
             raise
         except Exception:
             raise TrialRefused("database_unverified") from None
-    prepared, requests = fetch_items(manifest, fetcher)
+    prepared, requests = fetch_items(manifest, fetcher, clock)
     if dry_run:
         return TrialReport(prepared, None, requests)
     with sessions() as db, db.begin():
-        stored = save(db, manifest, prepared)
+        stored = save(db, manifest, prepared, clock=clock)
     return TrialReport(prepared, stored, requests)

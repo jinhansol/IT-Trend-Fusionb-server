@@ -49,6 +49,11 @@ def item_changed(index: int, **changes) -> dict:
     return data
 
 
+def fetch(m, fetcher, clock=lambda: INSIDE):
+    """fetch_items inside the example window (it ended on 2026-10-23)."""
+    return trial.fetch_items(m, fetcher, clock)
+
+
 def routes(**overrides) -> dict:
     answers = {
         CLOUD_ROBOTS: ALLOW,
@@ -85,7 +90,7 @@ def test_outside_the_window_nothing_is_requested_or_connected(now, code):
             raise AssertionError("the database must not be reached")
 
     with pytest.raises(trial.TrialRefused) as refused:
-        trial.run(manifest(), fetcher, engine=NoEngine(), now=now)
+        trial.run(manifest(), fetcher, engine=NoEngine(), clock=lambda: now)
     assert refused.value.code == code
     assert fetcher.calls == []
 
@@ -213,7 +218,7 @@ def test_the_cli_dry_run_reads_without_a_database(tmp_path, cli_doubles, capsys,
 def test_robots_refusal_requests_no_page_or_feed(robots):
     fetcher = FakeFetcher(routes(**{CLOUD_ROBOTS: robots}))
     with pytest.raises(trial.TrialRefused) as refused:
-        trial.fetch_items(manifest(), fetcher)
+        fetch(manifest(), fetcher)
     assert refused.value.code == "robots_refused"
     assert [url for url, _ in fetcher.calls] == [CLOUD_ROBOTS]
 
@@ -221,16 +226,16 @@ def test_robots_refusal_requests_no_page_or_feed(robots):
 def test_a_refusal_on_the_second_item_stops_before_its_feed():
     fetcher = FakeFetcher(routes(**{DEVLOG_ROBOTS: b"User-agent: *\nDisallow: /feed.xml\n"}))
     with pytest.raises(trial.TrialRefused):
-        trial.fetch_items(manifest(), fetcher)
+        fetch(manifest(), fetcher)
     assert FEED_URL not in [url for url, _ in fetcher.calls]
 
 
 def test_two_requests_per_item_at_most():
     fetcher = FakeFetcher(routes())
-    prepared, used = trial.fetch_items(manifest(), fetcher)
+    prepared, used = fetch(manifest(), fetcher)
     assert used == 4 == len(fetcher.calls) and len(prepared) == 2
 
-    budget = trial._Budget(FakeFetcher(routes()), 1)
+    budget = trial._Budget(FakeFetcher(routes()), 1, before_request=lambda: None)
     budget.get(CLOUD_ROBOTS)
     with pytest.raises(trial.TrialRefused) as refused:
         budget.get(NOTICE_URL)
@@ -273,7 +278,7 @@ def test_a_redirect_of_the_page_is_refused_and_not_followed():
         }
     )
     with pytest.raises(FetchError, match="redirect refused"):
-        trial.fetch_items(manifest(), http_fetcher(server))
+        fetch(manifest(), http_fetcher(server))
     assert server.requests == [CLOUD_ROBOTS, NOTICE_URL]
 
 
@@ -287,7 +292,7 @@ def test_a_redirect_of_robots_txt_is_a_refusal():
         }
     )
     with pytest.raises(trial.TrialRefused) as refused:
-        trial.fetch_items(manifest(), http_fetcher(server))
+        fetch(manifest(), http_fetcher(server))
     assert refused.value.code == "robots_refused"
     assert server.requests == [CLOUD_ROBOTS]
 
@@ -301,7 +306,7 @@ def test_a_failed_request_is_not_retried():
         }
     )
     with pytest.raises(FetchError):
-        trial.fetch_items(manifest(), http_fetcher(server))
+        fetch(manifest(), http_fetcher(server))
     assert server.requests == [CLOUD_ROBOTS, NOTICE_URL]
 
 
@@ -317,7 +322,7 @@ def test_hosts_outside_the_manifest_are_refused_by_the_fetcher():
 
 
 def test_the_atom_entry_is_the_one_target_with_only_allowed_fields():
-    prepared, _ = trial.fetch_items(manifest(), FakeFetcher(routes()))
+    prepared, _ = fetch(manifest(), FakeFetcher(routes()))
     notice, entry = (collected for _, collected in prepared)
 
     assert notice.url == NOTICE_URL
@@ -338,7 +343,7 @@ def test_source_tags_and_author_only_when_allowed():
     data = raw_manifest()
     data["items"][1]["fields"] = ["title", "url", "published_at", "source", "source_tags"]
     m = trial.Manifest.model_validate(data)
-    prepared, _ = trial.fetch_items(m, FakeFetcher(routes()))
+    prepared, _ = fetch(m, FakeFetcher(routes()))
     entry = prepared[1][1]
     assert entry.author is None
     assert sorted(entry.tags) == ["Backend", "Kafka"]
@@ -368,12 +373,12 @@ def feed_with(entries: list[str]) -> bytes:
 def test_the_target_must_match_exactly_one_entry(entries):
     fetcher = FakeFetcher(routes(**{FEED_URL: feed_with(entries)}))
     with pytest.raises(FetchError, match="exactly one entry"):
-        trial.fetch_items(manifest(), fetcher)
+        fetch(manifest(), fetcher)
 
 
 def test_a_tracking_parameter_on_the_entry_still_matches():
     fetcher = FakeFetcher(routes(**{FEED_URL: feed_with([TARGET + "?utm_source=rss"])}))
-    prepared, _ = trial.fetch_items(manifest(), fetcher)
+    prepared, _ = fetch(manifest(), fetcher)
     assert prepared[1][1].url == TARGET
 
 
@@ -381,7 +386,7 @@ def test_an_entry_without_a_date_fails():
     raw = feed_with([TARGET]).replace(b"<published>2026-10-01T00:00:00Z</published>", b"")
     raw = raw.replace(b"<updated>2026-10-01T00:00:00Z</updated></entry>", b"</entry>")
     with pytest.raises(FetchError, match="no publish time"):
-        trial.fetch_items(manifest(), FakeFetcher(routes(**{FEED_URL: raw})))
+        fetch(manifest(), FakeFetcher(routes(**{FEED_URL: raw})))
 
 
 # --- the notice page parser -------------------------------------------------------------
@@ -531,7 +536,6 @@ def test_the_experiment_database_and_account_pass():
             FakeConnection(GOOD_URL.replace("devhub_experiment:pw", "devhub:pw")),
             "not_the_experiment_account",
         ),
-        (FakeConnection(GOOD_URL.replace(":3308", ":3307")), "shared_dev_test_instance"),
         (FakeConnection(GOOD_URL, fails=True), "database_unverified"),
     ],
 )
@@ -575,7 +579,7 @@ class FakeSession:
 
 
 def test_a_wrong_writing_connection_saves_nothing():
-    prepared, _ = trial.fetch_items(manifest(), FakeFetcher(routes()))
+    prepared, _ = fetch(manifest(), FakeFetcher(routes()))
     db = FakeSession(FakeConnection(GOOD_URL, database="devhub_test"))
     taggers = []
     with pytest.raises(trial.TrialRefused) as refused:
@@ -593,7 +597,7 @@ def test_run_checks_the_database_before_any_request():
             return contextlib.nullcontext(FakeConnection(GOOD_URL, database="devhub_dev"))
 
     with pytest.raises(trial.TrialRefused) as refused:
-        trial.run(manifest(), fetcher, engine=Engine(), sessions=None, now=INSIDE)
+        trial.run(manifest(), fetcher, engine=Engine(), sessions=None, clock=lambda: INSIDE)
     assert refused.value.code == "not_the_experiment_database"
     assert fetcher.calls == []
 
@@ -605,7 +609,7 @@ def test_run_treats_an_unreachable_database_as_unverified():
 
     fetcher = FakeFetcher(routes())
     with pytest.raises(trial.TrialRefused) as refused:
-        trial.run(manifest(), fetcher, engine=Engine(), sessions=None, now=INSIDE)
+        trial.run(manifest(), fetcher, engine=Engine(), sessions=None, clock=lambda: INSIDE)
     assert refused.value.code == "database_unverified"
     assert fetcher.calls == []
 
@@ -623,3 +627,191 @@ def test_a_trial_source_row_is_never_collected():
 def test_sources_yaml_has_no_trial_entries():
     sources = yaml.safe_load((BACKEND_DIR / "content" / "sources.yaml").read_text("utf-8"))
     assert not [s for s in sources["sources"] if s["slug"].startswith("trial-")]
+
+
+# --- boundary fixes: URLs and ports, strict robots, expiry during the run ---------------
+
+
+def window_around_now() -> dict:
+    now = datetime.now(UTC).replace(microsecond=0)
+    return {
+        "created_at": (now - timedelta(hours=1)).isoformat(),
+        "expires_at": (now + timedelta(hours=1)).isoformat(),
+    }
+
+
+BAD_URLS = [
+    "https://cloud.example.invalid:8443/more/notices/1001",  # not the default port
+    "https://cloud.example.invalid:80/more/notices/1001",
+    "https://cloud.example.invalid:0/more/notices/1001",
+    "https://cloud.example.invalid:99999/more/notices/1001",  # out of range
+    "https://cloud.example.invalid:abc/more/notices/1001",  # not a number
+    "https://localhost/more/notices/1001",
+    "https://127.0.0.1/more/notices/1001",
+    "https://10.0.0.8/more/notices/1001",
+    "https://[::1]/more/notices/1001",
+    "https://2130706433/more/notices/1001",  # 127.0.0.1 in legacy form
+    "https://cloud.example.invalid/more/notices /1001",  # whitespace
+    "https://cloud.example.invalid/more/notices/1001\n",
+    "https:///more/notices/1001",  # no host
+]
+
+
+@pytest.mark.parametrize("url", BAD_URLS)
+def test_bad_urls_and_ports_are_refused_before_any_request_or_connection(
+    tmp_path, cli_doubles, capsys, url
+):
+    fetcher, reached = cli_doubles
+    data = {**raw_manifest(), **window_around_now()}
+    data["items"][0].update(input_url=url, target_url=url)
+    assert cli.main(["trial", write(tmp_path, data)]) == 2
+    assert fetcher.calls == [] and reached == []
+    assert "invalid_manifest" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "field", ["input_url", "target_url", "site_url"], ids=["feed", "entry", "site"]
+)
+def test_a_bad_port_on_any_atom_url_is_refused(field):
+    data = raw_manifest()
+    item = data["items"][1]
+    if field == "site_url":
+        item["source"] = {**item["source"], "site_url": "https://devlog.example.invalid:8080/"}
+    else:
+        item[field] = item[field].replace(".invalid/", ".invalid:8080/")
+    with pytest.raises(ValueError):
+        trial.Manifest.model_validate(data)
+
+
+def test_the_default_port_written_out_is_accepted():
+    data = raw_manifest()
+    url = "https://cloud.example.invalid:443/more/notices/1001"
+    data["items"][0].update(input_url=url, target_url=url)
+    trial.Manifest.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "robots",
+    [
+        FetchError("HTTP 404 from robots", status=404),  # collector: no rules, allowed
+        FetchError("HTTP 410 from robots", status=410),
+        b"<!DOCTYPE html><html><body>Not found</body></html>",  # an HTML page instead
+        b"<html><head></head></html>",
+    ],
+    ids=["404", "410", "html-doctype", "html"],
+)
+def test_the_trial_refuses_a_robots_txt_without_rules(robots):
+    fetcher = FakeFetcher(routes(**{CLOUD_ROBOTS: robots}))
+    with pytest.raises(trial.TrialRefused) as refused:
+        fetch(manifest(), fetcher)
+    assert refused.value.code == "robots_refused"
+    assert [url for url, _ in fetcher.calls] == [CLOUD_ROBOTS]
+
+
+@pytest.mark.parametrize(
+    "robots",
+    [FetchError("HTTP 404", status=404), b"<!DOCTYPE html><html></html>"],
+    ids=["404", "html"],
+)
+def test_the_collectors_robots_policy_is_unchanged(robots):
+    from app.integrations.robots import RobotsPolicy
+
+    verdict = RobotsPolicy(FakeFetcher({CLOUD_ROBOTS: robots})).check(NOTICE_URL)
+    assert verdict.allowed and "unavailable" in verdict.reason
+
+
+def test_an_empty_robots_txt_still_allows():
+    fetcher = FakeFetcher(routes(**{CLOUD_ROBOTS: b"", DEVLOG_ROBOTS: b"# no rules\n"}))
+    prepared, used = fetch(manifest(), fetcher)
+    assert len(prepared) == 2 and used == 4
+
+
+def test_a_feed_answered_with_an_html_page_fails():
+    page = b"<!DOCTYPE html><html><body><a href='/posts/kafka-delivery/'>x</a></body></html>"
+    fetcher = FakeFetcher(routes(**{FEED_URL: page}))
+    with pytest.raises(FetchError, match="HTML page"):
+        fetch(manifest(), fetcher)
+
+
+class SteppingClock:
+    """Answers the given times one per call, then the last one forever."""
+
+    def __init__(self, *times: datetime):
+        self.times, self.calls = list(times), 0
+
+    def __call__(self) -> datetime:
+        self.calls += 1
+        return self.times.pop(0) if len(self.times) > 1 else self.times[0]
+
+
+EXPIRED = datetime(2026, 10, 23, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("inside_calls", "requested"),
+    [
+        (1, []),  # expires right after the start check: no request at all
+        (2, [CLOUD_ROBOTS]),  # before the notice page
+        (3, [CLOUD_ROBOTS, NOTICE_URL]),  # before the second robots.txt
+        (4, [CLOUD_ROBOTS, NOTICE_URL, DEVLOG_ROBOTS]),  # before the feed
+    ],
+)
+def test_expiry_during_the_run_stops_the_next_request(inside_calls, requested):
+    fetcher = FakeFetcher(routes())
+    clock = SteppingClock(*([INSIDE] * inside_calls), EXPIRED)
+    with pytest.raises(trial.TrialRefused) as refused:
+        trial.run(manifest(), fetcher, clock=clock, dry_run=True)
+    assert refused.value.code == "trial_expired"
+    assert [url for url, _ in fetcher.calls] == requested
+
+
+def test_expiry_after_the_last_request_writes_nothing():
+    """All four requests made inside the window; the trial expires before the save."""
+    fetcher = FakeFetcher(routes())
+    clock = SteppingClock(*([INSIDE] * 5), EXPIRED)  # start + 4 requests, then expired
+    db = FakeSession(FakeConnection(GOOD_URL))
+    opened = []
+
+    class Engine:
+        def connect(self):
+            return contextlib.nullcontext(FakeConnection(GOOD_URL))
+
+    @contextlib.contextmanager
+    def sessions():
+        opened.append("session")
+        yield _Transactional(db)
+
+    with pytest.raises(trial.TrialRefused) as refused:
+        trial.run(manifest(), fetcher, engine=Engine(), sessions=sessions, clock=clock)
+    assert refused.value.code == "trial_expired"
+    assert len(fetcher.calls) == 4
+    assert opened == ["session"]
+    # only the connection check happened, inside no_autoflush; no query, add or flush
+    assert db.calls == ["connection(autoflush_off=True)"]
+
+
+class _Transactional:
+    """FakeSession plus a no-op begin(), as `with sessions() as db, db.begin()` needs."""
+
+    def __init__(self, db: FakeSession):
+        self._db = db
+
+    def begin(self):
+        return contextlib.nullcontext()
+
+    def __getattr__(self, name):
+        return getattr(self._db, name)
+
+
+def test_save_checks_the_window_before_the_first_write():
+    prepared, _ = fetch(manifest(), FakeFetcher(routes()))
+    db = FakeSession(FakeConnection(GOOD_URL))
+    with pytest.raises(trial.TrialRefused) as refused:
+        trial.save(db, manifest(), prepared, tagger_for=lambda db: None, clock=lambda: EXPIRED)
+    assert refused.value.code == "trial_expired"
+    assert db.calls == ["connection(autoflush_off=True)"]
+
+
+def test_the_local_dev_test_server_may_host_the_experiment_database():
+    trial.check_connection(FakeConnection(GOOD_URL.replace(":3308", ":3307")))
+    trial.check_connection(FakeConnection(GOOD_URL.replace(":3308", "")))
