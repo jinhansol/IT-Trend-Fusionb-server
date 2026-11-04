@@ -107,6 +107,17 @@ def _same_url(a: str | None, b: str | None) -> bool:
     return canonical(pa) == canonical(pb)
 
 
+def _is_feed_url(url: str | None) -> bool:
+    if not url:
+        return False
+    parts = urlsplit(url)
+    return (
+        parts.scheme in ("http", "https")
+        and bool(parts.hostname)
+        and not (parts.username or parts.password)
+    )
+
+
 def _valid(policy: ExperimentPolicy) -> bool:
     return (
         policy.database == EXPERIMENT_DATABASE
@@ -118,6 +129,9 @@ def _valid(policy: ExperimentPolicy) -> bool:
             g.actions <= ACTIONS
             and REQUIRED_FIELDS <= g.stored_fields <= REQUIRED_FIELDS | OPTIONAL_FIELDS
             and g.slug.startswith(EXPERIMENT_PREFIX)
+            # Experiments read RSS feeds only: an API adapter would bypass robots.txt.
+            and g.adapter == "rss"
+            and _is_feed_url(g.feed_url)
             for g in policy.sources.values()
         )
     )
@@ -202,18 +216,44 @@ def is_experiment_connection(connection: Connection) -> bool:
     return EXPERIMENT_DATABASE in (configured, actual)
 
 
-def require_experiment_engine(engine) -> None:
+def check_connection(
+    connection: Connection,
+    experiment: bool,
+    general_code: str = "general_source_in_experiment_database",
+) -> None:
+    """Experiment work only on exactly devhub_experiment; general work never there.
+    Checks this very connection (SELECT DATABASE()), so call it on the connection that
+    is about to be written to or read from."""
+    if experiment:
+        require_experiment_connection(connection)
+    elif is_experiment_connection(connection):
+        raise PolicyError(general_code)
+
+
+def check_session(db, experiment: bool, **kwargs) -> None:
+    """check_connection on a Session's own connection, before any autoflush or DML."""
+    with db.no_autoflush:
+        check_connection(db.connection(), experiment, **kwargs)
+
+
+def check_engine(engine, experiment: bool, **kwargs) -> None:
+    """A pre-check on a fresh pooled connection. Later sessions may get another
+    connection, so writes still check their own (check_session)."""
     try:
         with engine.connect() as connection:
-            require_experiment_connection(connection)
+            check_connection(connection, experiment, **kwargs)
     except PolicyError:
         raise
     except Exception:
         raise PolicyError("database_unverified") from None
 
 
+def require_experiment_engine(engine) -> None:
+    check_engine(engine, experiment=True)
+
+
 def engine_is_experiment(engine) -> bool:
-    """Configured name only (no query): cheap pre-check for general sources."""
+    """Configured name only (no query); the real check is check_engine/check_session."""
     return engine.url.database == EXPERIMENT_DATABASE
 
 

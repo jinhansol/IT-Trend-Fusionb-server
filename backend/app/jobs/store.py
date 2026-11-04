@@ -20,7 +20,7 @@ from app.db.types import utc_now
 from app.integrations.sources import CollectedItem
 from app.models.content import Content, ContentSource, ContentTechnology
 from app.services import experiment_policy as ep
-from app.services.source_terms import shows_excerpt, tags_with_excerpt
+from app.services.source_terms import collect_refusal, shows_excerpt, tags_with_excerpt
 from app.services.tagging import Tagger
 
 # Tracking parameters that make one article look like many.
@@ -70,15 +70,18 @@ def _tag(db: Session, content: Content, tagger: Tagger, excerpt: str | None) -> 
 
 
 def _guard(db: Session, source: ContentSource, items: list[CollectedItem]) -> list:
-    """The write boundary: checked on this session's connection, without autoflush."""
+    """The write boundary: checked on this session's connection, without autoflush.
+    Experiment sources are rechecked here as they are now (the collector passes the row
+    it read again after the request): still active, terms still approved, policy."""
     with db.no_autoflush:
-        connection = db.connection()
         if ep.is_experiment(source):
+            if collect_refusal(source) is not None:
+                code = "source_not_active" if source.status != "active" else "terms_not_approved"
+                raise ep.PolicyError(code, source.slug)
             grant = ep.require(source, "metadata_store")
-            ep.require_experiment_connection(connection)
+            ep.check_connection(db.connection(), experiment=True)
             return ep.project(items, grant)
-        if ep.is_experiment_connection(connection):
-            raise ep.PolicyError("general_source_in_experiment_database", source.slug)
+        ep.check_connection(db.connection(), experiment=False)
     return items
 
 

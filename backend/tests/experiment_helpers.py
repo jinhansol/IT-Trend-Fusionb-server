@@ -82,7 +82,7 @@ class FakeConnection:
         self.actual = actual
         self.queries = 0
 
-    def execute(self, statement):
+    def execute(self, statement, *params):
         self.queries += 1
         return SimpleNamespace(scalar=lambda: self.actual)
 
@@ -141,3 +141,84 @@ class NoDatabase:
 
     def connect(self):
         raise AssertionError("a general diagnose opened a database connection")
+
+
+# --- scripted handles: each new connection or session may see a different database ---
+
+
+class ScriptedConnection(FakeConnection):
+    def __init__(self, configured, actual, log):
+        super().__init__(configured, actual)
+        self.log = log
+
+    def scalar(self, statement, params=None):
+        self.log.append(str(statement).split("(")[0])  # e.g. "SELECT GET_LOCK"
+        return 1
+
+    def commit(self):
+        pass
+
+
+class ScriptedEngine:
+    """connect() hands out connections whose selected database follows `actuals` in
+    order (the last one repeats). `log` records lock statements."""
+
+    def __init__(self, configured, actuals):
+        self.url = SimpleNamespace(database=configured)
+        self.actuals = list(actuals)
+        self.log: list[str] = []
+        self.connects = 0
+
+    @contextmanager
+    def connect(self):
+        actual = self.actuals[min(self.connects, len(self.actuals) - 1)]
+        self.connects += 1
+        yield ScriptedConnection(self.url.database, actual, self.log)
+
+    def dispose(self):
+        pass
+
+
+class ScriptedSession(FakeSession):
+    """A FakeSession that also answers get(), execute() and queued scalars()."""
+
+    def __init__(self, connection, objects=None, results=()):
+        super().__init__(connection)
+        self.objects = objects or {}
+        self.results = list(results)
+        self.gets: list = []
+
+    def get(self, model, key):
+        self.gets.append(model.__name__)
+        return self.objects.get(model.__name__)
+
+    def scalars(self, statement):
+        return self.results.pop(0) if self.results else []
+
+    def execute(self, statement, *args, **kwargs):
+        return SimpleNamespace(all=lambda: [], scalars=lambda: [])
+
+
+class ScriptedSessions:
+    """Stands in for a sessionmaker: session n uses connection n (the last repeats)."""
+
+    def __init__(self, connections, objects=None, results=None):
+        self.connections = list(connections)
+        self.objects = objects or {}
+        self.results = results or {}
+        self.opened: list[ScriptedSession] = []
+
+    def _next(self):
+        n = len(self.opened)
+        connection = self.connections[min(n, len(self.connections) - 1)]
+        session = ScriptedSession(connection, self.objects, self.results.get(n, ()))
+        self.opened.append(session)
+        return session
+
+    @contextmanager
+    def begin(self):
+        yield self._next()
+
+    @contextmanager
+    def __call__(self):
+        yield self._next()

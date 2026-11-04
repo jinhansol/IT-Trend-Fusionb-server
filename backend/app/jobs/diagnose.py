@@ -110,7 +110,7 @@ def diagnose(
                 grant = ep.require(source, "metadata_read")
                 if engine is None:
                     raise ep.PolicyError("experiment_needs_its_database", source.slug)
-                ep.require_experiment_engine(engine)
+                ep.check_engine(engine, experiment=True)
             except ep.PolicyError as exc:
                 report.outcome, report.detail = "not requested", str(exc)
                 continue

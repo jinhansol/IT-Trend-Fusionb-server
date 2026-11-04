@@ -19,11 +19,7 @@ from sqlalchemy.orm import selectinload, sessionmaker
 from app.db.types import utc_now
 from app.integrations.llm import LLMClient
 from app.models.content import Content, ContentSource, ContentSummary
-from app.services.experiment_policy import (
-    PolicyError,
-    engine_is_experiment,
-    is_experiment_connection,
-)
+from app.services.experiment_policy import check_engine, check_session
 from app.services.source_terms import ai_summary_allowed, allows_ai_summary
 from app.summaries.policy import Budget
 from app.summaries.prompts import PROMPT_VERSIONS
@@ -49,19 +45,13 @@ def summary_kind(source: ContentSource) -> str:
     return "news" if source.kind == "news" else "dev"
 
 
+REFUSED = "summaries_refused_in_experiment_database"
+
+
 def require_general_database(engine: Engine) -> None:
-    """AI summaries are refused in the experiment database (A1); PolicyError otherwise."""
-    if engine_is_experiment(engine):
-        raise PolicyError("summaries_refused_in_experiment_database")
-    try:
-        with engine.connect() as connection:
-            experiment = is_experiment_connection(connection)
-    except PolicyError:
-        raise
-    except Exception:
-        raise PolicyError("database_unverified") from None
-    if experiment:
-        raise PolicyError("summaries_refused_in_experiment_database")
+    """AI summaries are refused in the experiment database (A1); PolicyError otherwise.
+    A pre-check on a pooled connection; each session below checks its own as well."""
+    check_engine(engine, experiment=False, general_code=REFUSED)
 
 
 def summarize_contents(
@@ -73,6 +63,7 @@ def summarize_contents(
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
     result = SummarizeResult()
     with sessions() as db:
+        check_session(db, experiment=False, general_code=REFUSED)  # before reading candidates
         items = list(
             db.scalars(
                 select(Content)
@@ -126,6 +117,7 @@ def summarize_contents(
             break
 
         with sessions.begin() as db:
+            check_session(db, experiment=False, general_code=REFUSED)  # before any write
             row = db.get(ContentSummary, item.id)
             if row is None:
                 row = ContentSummary(content_id=item.id, attempts=0)

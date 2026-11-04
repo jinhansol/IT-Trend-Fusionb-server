@@ -16,7 +16,9 @@
 - Experiment sources (app/services/experiment_policy.py) also need their policy, the
   devhub_experiment database and a RobotsPolicy; they follow no redirects and keep only
   the fields their policy allows. General sources are refused in devhub_experiment.
-  These checks run before the lock, job_runs or any request, and again when saving.
+  The database actually selected is checked before the lock, job_runs or any request,
+  then again on the lock connection and on every write session's own connection (a
+  pooled pre-check connection is not assumed to be the one a later session gets).
 """
 
 from dataclasses import dataclass, field
@@ -127,10 +129,9 @@ class Collector:
             grant = ep.require(source, *actions)
             if self._robots is None:
                 raise ep.PolicyError("robots_check_required", source.slug)
-            ep.require_experiment_engine(self._engine)
+            ep.check_engine(self._engine, experiment=True)
             return grant
-        if ep.engine_is_experiment(self._engine):
-            raise ep.PolicyError("general_source_in_experiment_database", source.slug)
+        ep.check_engine(self._engine, experiment=False)
         return None
 
     def fetch(self, source: ContentSource) -> Batch:
@@ -179,7 +180,12 @@ class Collector:
             self._experiment_grant(source, "metadata_read", "metadata_store")
         except ep.PolicyError as exc:
             return SourceResult(source.slug, "refused", error=str(exc))
+        experiment = ep.is_experiment(source)
         with self._engine.connect() as lock:
+            try:
+                ep.check_connection(lock, experiment)  # the connection that takes the lock
+            except ep.PolicyError as exc:
+                return SourceResult(source.slug, "refused", error=str(exc))
             acquired = lock.scalar(text("SELECT GET_LOCK(:name, 0)"), {"name": _lock_name(source)})
             if acquired != 1:
                 self._record(source, "skipped", error="another run of this source is in progress")
@@ -193,6 +199,10 @@ class Collector:
     def _record(self, source: ContentSource, status: str, error: str | None = None) -> None:
         now = utc_now()
         with self._sessions.begin() as db:
+            try:
+                ep.check_session(db, ep.is_experiment(source))
+            except ep.PolicyError:
+                return  # nothing is written to the wrong database
             db.add(
                 JobRun(
                     job_name=JOB_NAME,
@@ -205,7 +215,12 @@ class Collector:
             )
 
     def _run_locked(self, source: ContentSource) -> SourceResult:
+        experiment = ep.is_experiment(source)
         with self._sessions.begin() as db:
+            try:
+                ep.check_session(db, experiment)
+            except ep.PolicyError as exc:
+                return SourceResult(source.slug, "refused", error=str(exc))
             job = JobRun(job_name=JOB_NAME, source_id=source.id, status="running")
             db.add(job)
         result = SourceResult(source.slug, "running")
@@ -224,6 +239,13 @@ class Collector:
             result.skipped = getattr(exc, "skipped", 0)
 
         with self._sessions.begin() as db:
+            try:
+                ep.check_session(db, experiment)
+            except ep.PolicyError as exc:
+                # The run's row stays "running" rather than being written elsewhere.
+                result.status, result.error = "failed", str(exc)
+                result.inserted = result.updated = 0
+                return result
             row = db.get(JobRun, job.id)
             row.status = result.status
             row.finished_at = utc_now()
