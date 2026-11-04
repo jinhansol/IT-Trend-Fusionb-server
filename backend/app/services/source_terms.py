@@ -12,9 +12,10 @@ Rows loaded before these options existed have neither key and read as "unverifie
 the safe default is to store nothing new and to show title, source, date and link only.
 """
 
-from sqlalchemy import ColumnElement
+from sqlalchemy import ColumnElement, func
 
 from app.models.content import ContentSource
+from app.services.experiment_policy import EXPERIMENT_PREFIX, is_experiment
 
 
 def terms_approved(source: ContentSource) -> bool:
@@ -25,14 +26,25 @@ def shows_excerpt(source: ContentSource) -> bool:
     return terms_approved(source) and bool((source.options or {}).get("excerpt"))
 
 
+def tags_with_excerpt(source: ContentSource) -> bool:
+    """Whether the feed description may be used as tagging input (never stored for that).
+    Unset means yes for general sources, as before, and no for experiment sources."""
+    flag = (source.options or {}).get("tagging_excerpt")
+    return flag is True if is_experiment(source) else flag is not False
+
+
 def allows_ai_summary(source: ContentSource) -> bool:
-    return bool(source.ai_summary) and terms_approved(source)
+    """Experiment sources never get AI summaries (A1), whatever their switches say."""
+    return bool(source.ai_summary) and terms_approved(source) and not is_experiment(source)
 
 
 def ai_summary_allowed() -> ColumnElement[bool]:
     """allows_ai_summary as a SQL condition on ContentSource."""
-    return ContentSource.ai_summary.is_(True) & (
-        ContentSource.options["terms"].as_string() == "approved"
+    return (
+        ContentSource.ai_summary.is_(True)
+        & (ContentSource.options["terms"].as_string() == "approved")
+        & ~ContentSource.slug.startswith(EXPERIMENT_PREFIX)
+        & (func.coalesce(ContentSource.options["scope"].as_string(), "") == "")
     )
 
 

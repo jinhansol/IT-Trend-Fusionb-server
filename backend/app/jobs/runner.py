@@ -13,6 +13,10 @@
   read any source, since it writes nothing.
 - With a RobotsPolicy, an RSS feed whose robots.txt disallows it is not requested, and
   neither is a redirect to a path that the target host's robots.txt disallows.
+- Experiment sources (app/services/experiment_policy.py) also need their policy, the
+  devhub_experiment database and a RobotsPolicy; they follow no redirects and keep only
+  the fields their policy allows. General sources are refused in devhub_experiment.
+  These checks run before the lock, job_runs or any request, and again when saving.
 """
 
 from dataclasses import dataclass, field
@@ -22,10 +26,11 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.types import utc_now
 from app.integrations.http import Fetcher, FetchError
-from app.integrations.robots import RobotsPolicy, guard_redirects
+from app.integrations.robots import RobotsPolicy, guard_redirects, refuse_redirects
 from app.integrations.sources import Adapter, Batch, SourceConfig
 from app.jobs.store import store_items
 from app.models.content import ContentSource, JobRun
+from app.services import experiment_policy as ep
 from app.services.source_terms import collect_refusal
 from app.services.tagging import load_tagger
 
@@ -115,7 +120,29 @@ class Collector:
                 return rows
             return list(db.scalars(query.where(ContentSource.status == "active")))
 
+    def _experiment_grant(self, source: ContentSource, *actions: str) -> ep.SourceGrant | None:
+        """The policy grant for an experiment source (None for a general one), or
+        PolicyError. Needs no network; the database check is a SELECT DATABASE()."""
+        if ep.is_experiment(source):
+            grant = ep.require(source, *actions)
+            if self._robots is None:
+                raise ep.PolicyError("robots_check_required", source.slug)
+            ep.require_experiment_engine(self._engine)
+            return grant
+        if ep.engine_is_experiment(self._engine):
+            raise ep.PolicyError("general_source_in_experiment_database", source.slug)
+        return None
+
     def fetch(self, source: ContentSource) -> Batch:
+        grant = self._experiment_grant(source, "metadata_read")
+        if grant is None:
+            return self._fetch(source)
+        with refuse_redirects(self._fetcher):  # robots.txt and the feed alike
+            batch = self._fetch(source)
+        batch.items = ep.project(batch.items, grant)
+        return batch
+
+    def _fetch(self, source: ContentSource) -> Batch:
         adapter = self._adapters[source.adapter]
         if self._robots is not None and source.adapter == "rss" and source.feed_url:
             verdict = self._robots.check(source.feed_url)
@@ -148,6 +175,10 @@ class Collector:
         refusal = collect_refusal(source)
         if refusal is not None:
             return SourceResult(source.slug, "refused", error=refusal)
+        try:
+            self._experiment_grant(source, "metadata_read", "metadata_store")
+        except ep.PolicyError as exc:
+            return SourceResult(source.slug, "refused", error=str(exc))
         with self._engine.connect() as lock:
             acquired = lock.scalar(text("SELECT GET_LOCK(:name, 0)"), {"name": _lock_name(source)})
             if acquired != 1:
