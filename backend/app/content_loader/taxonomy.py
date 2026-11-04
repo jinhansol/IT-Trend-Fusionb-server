@@ -25,6 +25,15 @@ from app.content_loader.schema import (
     _validate,
 )
 from app.models.content import ContentSource, Technology, TechnologyAlias
+from app.services.experiment_policy import (
+    EXPERIMENT_PREFIX,
+    PolicyError,
+    grant_for,
+    is_experiment,
+    is_experiment_connection,
+    require_experiment_connection,
+    scope_of,
+)
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 Alias = Annotated[
@@ -124,10 +133,16 @@ class _SourceUse(_Strict):
               source, date and link.
     excerpt   also store and show the feed's own description (needs terms: approved).
     ai_summary (on SourceDef) is a separate permission again; approved alone allows neither.
+    tagging_excerpt  use the feed description as tagging input without storing it.
+              Unset: yes for general sources (as before), no for experiment sources.
+    scope     marks an experiment source (slug "exp-..."); it names a policy in
+              app/services/experiment_policy.py and grants nothing by itself.
     """
 
     terms: Literal["unverified", "approved"] = "unverified"
     excerpt: bool = False
+    tagging_excerpt: bool | None = None
+    scope: Slug | None = None
 
 
 class RssOptions(_SourceUse):
@@ -200,6 +215,14 @@ class SourceDef(_Strict):
                 raise ValueError("options.excerpt needs options.terms: approved")
             if self.ai_summary:
                 raise ValueError("ai_summary needs options.terms: approved")
+        # Experiment sources carry both markers or neither (experiment_policy.py).
+        scoped = "scope" in self.options
+        if scoped != self.slug.startswith(EXPERIMENT_PREFIX):
+            raise ValueError(
+                f"experiment sources need both a '{EXPERIMENT_PREFIX}' slug and options.scope"
+            )
+        if scoped and self.ai_summary:
+            raise ValueError("experiment sources cannot use ai_summary")
         return self
 
 
@@ -209,6 +232,10 @@ class SourcesFile(_Strict):
     @model_validator(mode="after")
     def _unique(self) -> "SourcesFile":
         _require_unique([s.slug for s in self.sources], "source slug")
+        if len({s.options.get("scope") for s in self.sources}) > 1:
+            raise ValueError(
+                "a sources file is either general (no scope) or one experiment scope, not mixed"
+            )
         channels: dict[str, tuple[str | None, bool]] = {}
         for source in self.sources:
             if source.channel is None:
@@ -226,7 +253,31 @@ def read_sources(path: Path) -> SourcesFile:
     return _validate(SourcesFile, _read_yaml(path), path)
 
 
+def _guard_sources(db: Session, content: SourcesFile) -> None:
+    """Before any write: a general file goes only to a non-experiment database with no
+    experiment rows; an experiment file only to devhub_experiment, every source covered
+    by its policy, and no rows of another scope or general rows that it would retire.
+    Uses the session's own connection, without autoflush, so nothing is written first."""
+    scope = content.sources[0].options.get("scope")  # one scope per file (validated)
+    with db.no_autoflush:
+        if scope is None:
+            if is_experiment_connection(db.connection()):
+                raise PolicyError("general_file_in_experiment_database")
+            rows = db.scalars(select(ContentSource))
+            stray = [r.slug for r in rows if is_experiment(r) and r.status != "retired"]
+            if stray:
+                raise PolicyError("experiment_rows_in_general_database", stray[0])
+            return
+        for source_def in content.sources:
+            grant_for(source_def)
+        require_experiment_connection(db.connection())
+        for row in db.scalars(select(ContentSource)):
+            if row.status != "retired" and scope_of(row) != scope:
+                raise PolicyError("rows_of_another_scope", row.slug)
+
+
 def apply_sources(db: Session, content: SourcesFile) -> LoadReport:
+    _guard_sources(db, content)
     report = LoadReport(track="sources", kind="file")
     existing = {s.slug: s for s in db.scalars(select(ContentSource))}
     for position, source_def in enumerate(content.sources, start=1):

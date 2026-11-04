@@ -1,0 +1,36 @@
+# EXAMPLE ONLY: the shape of an experiment sources file (stage A1). It cannot run.
+#
+# An experiment source has an "exp-" slug and options.scope naming a policy in
+# app/services/experiment_policy.py. That policy, in code, decides everything that is
+# allowed: the database (devhub_experiment only), the time window, each source's exact
+# adapter/kind/language/site/feed URL, the actions and the stored fields. The registry
+# there is empty, so loading or collecting this file is refused, and the URLs below are
+# placeholders (.invalid) that never resolve.
+#
+# Flags here can only narrow a policy: terms: approved is still needed to store, and
+# excerpt / tagging_excerpt must also be allowed by the policy. ai_summary is never
+# allowed for experiment sources in A1. See docs/devhub-2.0/A1-Experiment-Safety.md.
+
+sources:
+  - slug: exp-news-example
+    name: Example news (placeholder)
+    kind: news
+    adapter: rss
+    language: ko
+    site_url: "https://news.example.invalid/"
+    feed_url: "https://news.example.invalid/rss.xml"
+    status: paused
+    options: { scope: example-trial, terms: unverified, excerpt: false, tagging_excerpt: false }
+
+  - slug: exp-blog-example
+    name: Example blog (placeholder)
+    kind: blog
+    adapter: rss
+    language: ko
+    site_url: "https://blog.example.invalid/"
+    feed_url: "https://blog.example.invalid/feed.xml"
+    channel: exp-blog
+    channel_name: Example blog
+    max_items: 10
+    status: paused
+    options: { scope: example-trial, terms: unverified, excerpt: false, tagging_excerpt: false }
