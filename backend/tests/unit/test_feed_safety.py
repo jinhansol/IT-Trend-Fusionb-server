@@ -148,6 +148,28 @@ def test_a_large_robots_file_keeps_its_rules():
     assert MAX_ROBOTS_BYTES >= 500 * 1024
 
 
+BOM = b"\xef\xbb\xbf"
+
+
+@pytest.mark.parametrize("bom", [b"", BOM], ids=["no-bom", "utf8-bom"])
+def test_a_utf8_bom_does_not_hide_the_first_group(bom):
+    # Before: with a BOM the first line read as "\ufeffUser-agent", an unknown key, so the
+    # group was dropped and /hidden/ was allowed.
+    body = bom + b"User-agent: *\nDisallow: /hidden/\nAllow: /hidden/public/\n"
+    policy = RobotsPolicy(FakeFetcher({"https://a.example/robots.txt": body}))
+    assert not policy.check("https://a.example/hidden/").allowed
+    assert not policy.check("https://a.example/hidden/page").allowed
+    assert policy.check("https://a.example/hidden/public/").allowed
+    assert policy.check("https://a.example/feed").allowed
+    assert not verdict(body.decode("utf-8"), "https://a.example/hidden/")
+
+
+def test_a_bom_before_a_named_group_still_selects_it():
+    robots = "\ufeffUser-agent: DevHubCollector\nDisallow: /feed/\n\nUser-agent: *\nDisallow: /\n"
+    assert not verdict(robots, "https://a.example/feed/")
+    assert verdict(robots, "https://a.example/news")
+
+
 def test_robots_is_read_once_per_host():
     fetcher = FakeFetcher({"https://a.example/robots.txt": b"User-agent: *\nDisallow: /feed/\n"})
     policy = RobotsPolicy(fetcher)

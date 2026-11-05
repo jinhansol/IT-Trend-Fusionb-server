@@ -817,7 +817,12 @@ def test_the_local_dev_test_server_may_host_the_experiment_database():
     trial.check_connection(FakeConnection(GOOD_URL.replace(":3308", "")))
 
 
-# --- robots.txt answered with markup, with or without a BOM ---------------------------
+# --- robots.txt in a trial: markup refused; a BOM before real rules is read -------------
+# Two separate checks. (1) Markup refusal, trial only: a body that starts with HTML or other
+# markup (after any BOM or whitespace) is not robots.txt, so the trial refuses before the
+# target; the general collector reads it as "no rules" and allows. (2) BOM support: a UTF-8
+# BOM before real rules must not hide them. The general parser handles this since PR #20
+# (test_feed_safety.py); the trial also strips the BOM itself before its markup check.
 
 BOM = b"\xef\xbb\xbf"
 BOM_HTML = BOM + b"<!DOCTYPE html><html><body>Please enable JavaScript</body></html>"
@@ -857,8 +862,10 @@ def test_an_empty_robots_file_still_allows(robots):
 
 
 def test_a_bom_does_not_hide_the_first_rule_in_a_trial():
-    """With the BOM left in, the first line reads as an unknown key and its rules apply
-    to nobody; the trial drops the BOM, so the Disallow is honoured."""
+    """BOM support, not markup refusal: real rules after a UTF-8 BOM are read and the
+    Disallow is honoured, so the target is not requested. (Before PR #20 the general
+    parser read the BOM-prefixed first line as an unknown key; the trial stripped the BOM
+    itself, and still does before its markup check.)"""
     robots = BOM + b"User-agent: *\nDisallow: /more/\n"
     fetcher = FakeFetcher(routes(**{CLOUD_ROBOTS: robots}))
     with pytest.raises(trial.TrialRefused) as refused:
@@ -870,7 +877,7 @@ def test_a_bom_does_not_hide_the_first_rule_in_a_trial():
 @pytest.mark.parametrize(
     ("robots", "allowed"),
     [
-        (BOM_HTML, True),  # no rules found: allowed, as before
+        (BOM_HTML, True),  # markup is no rules: the collector allows (the trial refuses)
         (BODY_PAGE, True),
         (b"", True),
         (b"User-agent: *\nDisallow: /more/\n", False),
@@ -878,6 +885,8 @@ def test_a_bom_does_not_hide_the_first_rule_in_a_trial():
     ids=["bom-html", "body-page", "empty", "disallow"],
 )
 def test_the_collectors_robots_policy_is_unchanged_for_these_inputs(robots, allowed):
+    """The markup refusal above is trial-only; the general collector's policy for these
+    inputs stays as it was. Its BOM handling is tested in test_feed_safety.py."""
     from app.integrations.robots import RobotsPolicy
 
     assert RobotsPolicy(FakeFetcher({CLOUD_ROBOTS: robots})).check(NOTICE_URL).allowed is allowed
