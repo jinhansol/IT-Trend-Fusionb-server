@@ -29,7 +29,7 @@ jobs = [
 ]
 
 [tool.uv]
-# The legacy modules under backend/ are not a package; only app/ is ours.
+# Not an installable package: the application lives in app/.
 package = false
 # Collector-only libraries live in the "jobs" group so a web-only image can skip them
 # (uv sync --no-group jobs). Development and CI install both.
