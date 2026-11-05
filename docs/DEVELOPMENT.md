@@ -95,7 +95,7 @@ uv run uvicorn app.main:create_app --factory --reload
 ```powershell
 uv run python -m app.content_loader technologies content/technologies.yaml   # 기술 분류 (먼저)
 uv run python -m app.content_loader sources content/sources.yaml             # 수집 소스 등록
-uv run python -m app.content_loader load content/python                      # 학습 트랙
+uv run python -m app.content_loader load content/python content/kafka        # 학습 트랙 (Python 기초 · Kafka 기초)
 ```
 
 - 모든 명령에 `--dry-run`을 붙이면 바뀔 내용만 보여 주고 되돌립니다.
