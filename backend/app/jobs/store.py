@@ -1,7 +1,10 @@
 """Save collected items: insert new ones, refresh metrics of known ones, tag once.
 
 The feed description (excerpt) is stored only for sources allowed to show it
-(options.excerpt); for the others it is used for tagging and not kept.
+(options.excerpt); it is used as tagging input unless options.tagging_excerpt is false
+(experiment sources: only when it is true). Before anything is written, the session's
+own connection is checked: experiment sources need their policy (metadata_store) and
+devhub_experiment, and keep only the fields it allows; general sources are refused there.
 
 The caller owns the transaction.
 """
@@ -16,7 +19,8 @@ from sqlalchemy.orm import Session
 from app.db.types import utc_now
 from app.integrations.sources import CollectedItem
 from app.models.content import Content, ContentSource, ContentTechnology
-from app.services.source_terms import shows_excerpt
+from app.services import experiment_policy as ep
+from app.services.source_terms import collect_refusal, shows_excerpt, tags_with_excerpt
 from app.services.tagging import Tagger
 
 # Tracking parameters that make one article look like many.
@@ -65,11 +69,29 @@ def _tag(db: Session, content: Content, tagger: Tagger, excerpt: str | None) -> 
         db.add(ContentTechnology(content_id=content.id, technology_id=tech_id, method="rule"))
 
 
+def _guard(db: Session, source: ContentSource, items: list[CollectedItem]) -> list:
+    """The write boundary: checked on this session's connection, without autoflush.
+    Experiment sources are rechecked here as they are now (the collector passes the row
+    it read again after the request): still active, terms still approved, policy."""
+    with db.no_autoflush:
+        if ep.is_experiment(source):
+            if collect_refusal(source) is not None:
+                code = "source_not_active" if source.status != "active" else "terms_not_approved"
+                raise ep.PolicyError(code, source.slug)
+            grant = ep.require(source, "metadata_store")
+            ep.check_connection(db.connection(), experiment=True)
+            return ep.project(items, grant)
+        ep.check_connection(db.connection(), experiment=False)
+    return items
+
+
 def store_items(
     db: Session, source: ContentSource, items: list[CollectedItem], tagger: Tagger
 ) -> StoreResult:
+    items = _guard(db, source, items)
     result = StoreResult()
     keep_excerpt = shows_excerpt(source)
+    tag_excerpt = tags_with_excerpt(source)
     by_hash: dict[str, CollectedItem] = {}
     for item in items:
         url = normalize_url(item.url)
@@ -117,7 +139,7 @@ def store_items(
             )
             db.add(content)
             db.flush()
-            _tag(db, content, tagger, item.excerpt)
+            _tag(db, content, tagger, item.excerpt if tag_excerpt else None)
             result.inserted += 1
             continue
 
@@ -138,6 +160,6 @@ def store_items(
             result.updated += 1
         if retag:
             db.flush()
-            _tag(db, content, tagger, item.excerpt)
+            _tag(db, content, tagger, item.excerpt if tag_excerpt else None)
     db.flush()
     return result

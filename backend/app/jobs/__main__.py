@@ -46,7 +46,9 @@ from app.jobs.article_bodies import WEBDEV_HOSTS, finished_ids, webdev_bodies
 from app.jobs.diagnose import diagnose
 from app.jobs.runner import Collector, UnknownSource
 from app.jobs.schedule import GROUPS, SCHEDULE_FILE, check_sources, crontab, load_schedule
-from app.jobs.summarize import summarize_contents
+from app.jobs.summarize import require_general_database, summarize_contents
+from app.services.experiment_policy import POLICY_PREFIX as POLICY
+from app.services.experiment_policy import PolicyError, is_experiment
 from app.summaries.policy import Budget
 
 SOURCES_FILE = Path(__file__).resolve().parents[2] / "content" / "sources.yaml"
@@ -132,13 +134,14 @@ def main(argv: list[str] | None = None) -> int:
 
     failed = sum(r.status == "failed" for r in results)
     refused = sum(r.status == "refused" for r in results)
+    blocked = sum(r.status == "refused" and str(r.error).startswith(POLICY) for r in results)
     print(
         f"database: {settings.database_name} — {len(results)} sources, {failed} failed"
         + (f", {refused} refused" if refused else "")
         + (f" (group {args.group})" if args.group else "")
         + (" (dry run, nothing saved)" if args.dry_run else "")
     )
-    return 1 if failed else 0
+    return 1 if failed or blocked else 0
 
 
 def _diagnose(args, settings) -> int:
@@ -152,11 +155,16 @@ def _diagnose(args, settings) -> int:
         listed = [s for s in listed if s.slug in args.sources]
     elif args.group:
         listed = [s for s in listed if (s.kind == "news") == (args.group == "news")]
+    # Experiment sources are checked against the database actually connected; general
+    # ones never open a database connection.
+    engine = create_db_engine(settings) if any(is_experiment(s) for s in listed) else None
     fetcher = HttpFetcher(settings)
     try:
-        reports = diagnose(listed, fetcher, load_schedule(args.schedule))
+        reports = diagnose(listed, fetcher, load_schedule(args.schedule), engine=engine)
     finally:
         fetcher.close()
+        if engine is not None:
+            engine.dispose()
     for report in reports:
         print(report.line(), flush=True)
         for title in report.titles:
@@ -167,7 +175,8 @@ def _diagnose(args, settings) -> int:
         f"diagnose — {len(reports)} sources, {failed} failed, {blocked} not requested "
         "(read-only, nothing saved)"
     )
-    return 1 if failed else 0
+    refused = sum(str(r.detail or "").startswith(POLICY) for r in reports)
+    return 1 if failed or refused else 0
 
 
 def _trial(args, settings) -> int:
@@ -259,10 +268,19 @@ def _model_job(args, settings) -> int:
     if args.max_calls < 1:
         print("--max-calls must be at least 1", file=sys.stderr)
         return 2
+    # Before any body file is read or a model client exists: never in devhub_experiment.
+    engine = create_db_engine(settings)
+    try:
+        require_general_database(engine)
+    except PolicyError as exc:
+        engine.dispose()
+        print(f"Refused: {exc}; nothing was read, sent or saved", file=sys.stderr)
+        return 2
     bodies = {}
     for spec in getattr(args, "body", []):
         url, sep, path = spec.partition("=")
         if not sep or not Path(path).is_file():
+            engine.dispose()
             print(f"--body expects URL=FILE with an existing file: {spec}", file=sys.stderr)
             return 2
         form = "markdown" if path.endswith(".md") else "html"
@@ -270,10 +288,10 @@ def _model_job(args, settings) -> int:
     try:
         client = gemini_client(settings)
     except GeminiNotConfigured as exc:
+        engine.dispose()
         print(f"{exc}; nothing was sent or saved", file=sys.stderr)
         return 2
 
-    engine = create_db_engine(settings)
     budget = Budget(max_calls=args.max_calls)
     fetcher = None
     try:

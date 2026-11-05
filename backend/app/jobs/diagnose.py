@@ -10,15 +10,17 @@ many hours the newest `max_items` entries cover compared with the gap between
 scheduled runs (a window shorter than the gap loses articles).
 """
 
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from app.content_loader.taxonomy import SourceDef
 from app.integrations.http import Fetcher, FetchError
-from app.integrations.robots import RobotsPolicy, guard_redirects
+from app.integrations.robots import RobotsPolicy, guard_redirects, refuse_redirects
 from app.integrations.sources import parse_feed
 from app.jobs.schedule import Schedule
 from app.jobs.store import normalize_url, url_hash
+from app.services import experiment_policy as ep
 
 FEED_ENTRIES = 1000  # read the whole feed, not just max_items, to measure it
 SAFETY = 1.5  # the window should cover the gap between runs with this margin
@@ -81,7 +83,11 @@ def diagnose(
     fetcher: Fetcher,
     schedule: Schedule,
     now: datetime | None = None,
+    engine=None,
 ) -> list[FeedReport]:
+    """General sources need no database. Experiment sources need their policy
+    (metadata_read) and `engine` connected to devhub_experiment before anything is
+    requested; they follow no redirects and keep only the fields their policy allows."""
     now = now or datetime.now(UTC).replace(tzinfo=None)
     robots = RobotsPolicy(fetcher)
     reports = []
@@ -98,16 +104,29 @@ def diagnose(
         if source.adapter != "rss" or not source.feed_url:
             report.outcome, report.detail = "not requested", "not an RSS source"
             continue
-        verdict = robots.check(source.feed_url)
-        if not verdict.allowed:
-            report.outcome, report.detail = "not requested", verdict.reason
-            continue
-        try:
-            with guard_redirects(fetcher, robots):  # each redirect hop is checked too
-                batch = parse_feed(fetcher.get(source.feed_url), FEED_ENTRIES)
-        except FetchError as exc:
-            report.outcome, report.detail = "failed", str(exc)
-            continue
+        grant = None
+        if ep.is_experiment(source):
+            try:
+                grant = ep.require(source, "metadata_read")
+                if engine is None:
+                    raise ep.PolicyError("experiment_needs_its_database", source.slug)
+                ep.check_engine(engine, experiment=True)
+            except ep.PolicyError as exc:
+                report.outcome, report.detail = "not requested", str(exc)
+                continue
+        with refuse_redirects(fetcher) if grant else nullcontext():
+            verdict = robots.check(source.feed_url)
+            if not verdict.allowed:
+                report.outcome, report.detail = "not requested", verdict.reason
+                continue
+            try:
+                with guard_redirects(fetcher, robots):  # each redirect hop is checked too
+                    batch = parse_feed(fetcher.get(source.feed_url), FEED_ENTRIES)
+            except FetchError as exc:
+                report.outcome, report.detail = "failed", str(exc)
+                continue
+        if grant:
+            batch.items = ep.project(batch.items, grant)
         _measure(report, batch, source.max_items, now)
     return reports
 

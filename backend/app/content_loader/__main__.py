@@ -6,7 +6,9 @@
     uv run python -m app.content_loader careers <careers.yaml> [--dry-run]
 
 All given files are validated first; then everything is written in one
-transaction. --dry-run prints the changes and rolls back.
+transaction. --dry-run prints the changes and rolls back. A sources file is checked
+against the database actually connected before anything is written: experiment files
+(options.scope) only go to devhub_experiment, general files never do.
 """
 
 import argparse
@@ -27,6 +29,7 @@ from app.content_loader.taxonomy import (
 )
 from app.core.config import get_settings
 from app.db.session import create_db_engine, create_session_factory
+from app.services.experiment_policy import PolicyError
 
 
 def _parse(argv: list[str] | None) -> argparse.Namespace:
@@ -82,6 +85,11 @@ def main(argv: list[str] | None = None) -> int:
         # Problems that need the database to detect (e.g. unknown technologies).
         session.rollback()
         print(f"Content error: {exc}", file=sys.stderr)
+        return 1
+    except PolicyError as exc:
+        # Checked before any write (also for --dry-run); the message holds no URL or key.
+        session.rollback()
+        print(f"Refused: {exc}", file=sys.stderr)
         return 1
     except Exception:
         session.rollback()

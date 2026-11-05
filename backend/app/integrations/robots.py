@@ -14,7 +14,9 @@ A large file is parsed up to MAX_ROBOTS_BYTES (RFC 9309 2.5: at least 500 KiB); 
 rules found there still apply, so size never turns a Disallow into an Allow.
 
 Redirects of a guarded request (guard_redirects) are checked hop by hop: a redirect to a
-path the target host's robots.txt disallows is not followed.
+path the target host's robots.txt disallows is not followed. An experiment request
+(refuse_redirects) follows no redirect at all, robots.txt's own included. Both hooks
+keep any hook already installed and restore it afterwards.
 One robots.txt request per host per run; the answer is cached in the policy object.
 """
 
@@ -197,7 +199,35 @@ def guard_redirects(fetcher: Fetcher, robots: RobotsPolicy) -> Iterator[None]:
         yield
         return
     previous = fetcher.on_redirect
-    fetcher.on_redirect = robots.require
+
+    def check(url: str) -> None:
+        if previous is not None:
+            previous(url)  # an outer hook (e.g. refuse_redirects) keeps its say
+        robots.require(url)
+
+    fetcher.on_redirect = check
+    try:
+        yield
+    finally:
+        fetcher.on_redirect = previous
+
+
+class RedirectRefused(FetchError):
+    """An experiment request was redirected; only the reviewed URL is ever fetched."""
+
+
+@contextmanager
+def refuse_redirects(fetcher: Fetcher) -> Iterator[None]:
+    """While active, every redirect fails before its target is requested."""
+    if not hasattr(fetcher, "on_redirect"):
+        yield  # test doubles do not redirect
+        return
+    previous = fetcher.on_redirect
+
+    def refuse(url: str) -> None:
+        raise RedirectRefused("redirect refused for an experiment source")
+
+    fetcher.on_redirect = refuse
     try:
         yield
     finally:

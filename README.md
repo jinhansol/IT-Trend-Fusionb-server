@@ -257,5 +257,6 @@ npm run dev                                   # http://localhost:5173
 | [E0 소스 이용 조건 검토](docs/devhub-2.0/DevHub-2.0-E0-Source-Terms-Review.md) | 해외·국내 소스 약관·robots.txt 검토 |
 | [1.0·2.0 수집 구조 비교](docs/devhub-2.0/DevHub-2.0-News-Collection-Architecture-Comparison.md) | 1.0 수집 방식과 2.0 재설계 근거 |
 | [P5-0 수집·콘텐츠 검토](docs/devhub-2.0/DevHub-2.0-P5-0-Collection-and-Content-Review.md) | 수집 데이터로 추천이 가능한지에 대한 검토 |
+| [A1 단기 실험 안전 경계](docs/devhub-2.0/A1-Experiment-Safety.md) | 실험 설정·DB 격리, 실행 전·종료 체크리스트, 공개 범위 |
 
 설계·검토 문서 일부는 해외 소스를 쓰던 시점에 작성되어, 현재의 국내 중심 정책과 다른 내용이 있습니다.

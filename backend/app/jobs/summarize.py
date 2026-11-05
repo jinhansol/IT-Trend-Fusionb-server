@@ -1,6 +1,8 @@
 """Summarize News and Dev items with the E1 summarizer, once per article text.
 
-Only items whose source has ai_summary on, with approved terms, are touched. The article
+Only items whose source has ai_summary on, with approved terms, are touched; experiment
+sources never are, and nothing runs at all against devhub_experiment (checked before
+any body is read, any model client is used or anything is written). The article
 body comes from `bodies`, supplied by the caller (HTML or Markdown); the feed excerpt is never
 summarized, so an item without a body is left alone. A stored done or skipped result
 for the same input hash is kept without a model call; a failure is retried on later
@@ -17,7 +19,8 @@ from sqlalchemy.orm import selectinload, sessionmaker
 from app.db.types import utc_now
 from app.integrations.llm import LLMClient
 from app.models.content import Content, ContentSource, ContentSummary
-from app.services.source_terms import ai_summary_allowed
+from app.services.experiment_policy import check_engine, check_session
+from app.services.source_terms import ai_summary_allowed, allows_ai_summary
 from app.summaries.policy import Budget
 from app.summaries.prompts import PROMPT_VERSIONS
 from app.summaries.summarizer import Summarizer, SummaryInput
@@ -42,14 +45,25 @@ def summary_kind(source: ContentSource) -> str:
     return "news" if source.kind == "news" else "dev"
 
 
+REFUSED = "summaries_refused_in_experiment_database"
+
+
+def require_general_database(engine: Engine) -> None:
+    """AI summaries are refused in the experiment database (A1); PolicyError otherwise.
+    A pre-check on a pooled connection; each session below checks its own as well."""
+    check_engine(engine, experiment=False, general_code=REFUSED)
+
+
 def summarize_contents(
     engine: Engine, client: LLMClient, bodies: BodyProvider, budget: Budget | None = None
 ) -> SummarizeResult:
+    require_general_database(engine)
     budget = budget or Budget()
     summarizer = Summarizer(client, budget)
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
     result = SummarizeResult()
     with sessions() as db:
+        check_session(db, experiment=False, general_code=REFUSED)  # before reading candidates
         items = list(
             db.scalars(
                 select(Content)
@@ -71,6 +85,8 @@ def summarize_contents(
         }
 
     for item in items:
+        if not allows_ai_summary(item.source):  # experiment rows never reach a body or model
+            continue
         body = bodies(item)
         if body is None:
             result.no_body += 1
@@ -101,6 +117,7 @@ def summarize_contents(
             break
 
         with sessions.begin() as db:
+            check_session(db, experiment=False, general_code=REFUSED)  # before any write
             row = db.get(ContentSummary, item.id)
             if row is None:
                 row = ContentSummary(content_id=item.id, attempts=0)

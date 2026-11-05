@@ -13,6 +13,12 @@
   read any source, since it writes nothing.
 - With a RobotsPolicy, an RSS feed whose robots.txt disallows it is not requested, and
   neither is a redirect to a path that the target host's robots.txt disallows.
+- Experiment sources (app/services/experiment_policy.py) also need their policy, the
+  devhub_experiment database and a RobotsPolicy; they follow no redirects and keep only
+  the fields their policy allows. General sources are refused in devhub_experiment.
+  The database actually selected is checked before the lock, job_runs or any request,
+  then again on the lock connection and on every write session's own connection (a
+  pooled pre-check connection is not assumed to be the one a later session gets).
 """
 
 from dataclasses import dataclass, field
@@ -22,10 +28,11 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.types import utc_now
 from app.integrations.http import Fetcher, FetchError
-from app.integrations.robots import RobotsPolicy, guard_redirects
+from app.integrations.robots import RobotsPolicy, guard_redirects, refuse_redirects
 from app.integrations.sources import Adapter, Batch, SourceConfig
 from app.jobs.store import store_items
 from app.models.content import ContentSource, JobRun
+from app.services import experiment_policy as ep
 from app.services.source_terms import collect_refusal
 from app.services.tagging import load_tagger
 
@@ -115,7 +122,28 @@ class Collector:
                 return rows
             return list(db.scalars(query.where(ContentSource.status == "active")))
 
+    def _experiment_grant(self, source: ContentSource, *actions: str) -> ep.SourceGrant | None:
+        """The policy grant for an experiment source (None for a general one), or
+        PolicyError. Needs no network; the database check is a SELECT DATABASE()."""
+        if ep.is_experiment(source):
+            grant = ep.require(source, *actions)
+            if self._robots is None:
+                raise ep.PolicyError("robots_check_required", source.slug)
+            ep.check_engine(self._engine, experiment=True)
+            return grant
+        ep.check_engine(self._engine, experiment=False)
+        return None
+
     def fetch(self, source: ContentSource) -> Batch:
+        grant = self._experiment_grant(source, "metadata_read")
+        if grant is None:
+            return self._fetch(source)
+        with refuse_redirects(self._fetcher):  # robots.txt and the feed alike
+            batch = self._fetch(source)
+        batch.items = ep.project(batch.items, grant)
+        return batch
+
+    def _fetch(self, source: ContentSource) -> Batch:
         adapter = self._adapters[source.adapter]
         if self._robots is not None and source.adapter == "rss" and source.feed_url:
             verdict = self._robots.check(source.feed_url)
@@ -148,7 +176,16 @@ class Collector:
         refusal = collect_refusal(source)
         if refusal is not None:
             return SourceResult(source.slug, "refused", error=refusal)
+        try:
+            self._experiment_grant(source, "metadata_read", "metadata_store")
+        except ep.PolicyError as exc:
+            return SourceResult(source.slug, "refused", error=str(exc))
+        experiment = ep.is_experiment(source)
         with self._engine.connect() as lock:
+            try:
+                ep.check_connection(lock, experiment)  # the connection that takes the lock
+            except ep.PolicyError as exc:
+                return SourceResult(source.slug, "refused", error=str(exc))
             acquired = lock.scalar(text("SELECT GET_LOCK(:name, 0)"), {"name": _lock_name(source)})
             if acquired != 1:
                 self._record(source, "skipped", error="another run of this source is in progress")
@@ -162,6 +199,10 @@ class Collector:
     def _record(self, source: ContentSource, status: str, error: str | None = None) -> None:
         now = utc_now()
         with self._sessions.begin() as db:
+            try:
+                ep.check_session(db, ep.is_experiment(source))
+            except ep.PolicyError:
+                return  # nothing is written to the wrong database
             db.add(
                 JobRun(
                     job_name=JOB_NAME,
@@ -174,7 +215,12 @@ class Collector:
             )
 
     def _run_locked(self, source: ContentSource) -> SourceResult:
+        experiment = ep.is_experiment(source)
         with self._sessions.begin() as db:
+            try:
+                ep.check_session(db, experiment)
+            except ep.PolicyError as exc:
+                return SourceResult(source.slug, "refused", error=str(exc))
             job = JobRun(job_name=JOB_NAME, source_id=source.id, status="running")
             db.add(job)
         result = SourceResult(source.slug, "running")
@@ -193,6 +239,13 @@ class Collector:
             result.skipped = getattr(exc, "skipped", 0)
 
         with self._sessions.begin() as db:
+            try:
+                ep.check_session(db, experiment)
+            except ep.PolicyError as exc:
+                # The run's row stays "running" rather than being written elsewhere.
+                result.status, result.error = "failed", str(exc)
+                result.inserted = result.updated = 0
+                return result
             row = db.get(JobRun, job.id)
             row.status = result.status
             row.finished_at = utc_now()
