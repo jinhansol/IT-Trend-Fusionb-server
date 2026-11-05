@@ -1,0 +1,241 @@
+slug: kafka-fundamentals
+position: 1
+title: "Kafka 핵심 개념: producer, topic, partition, consumer, offset"
+summary: >-
+  온라인 쇼핑몰의 주문 이벤트가 Kafka를 거쳐 처리되는 흐름으로 producer, topic, partition,
+  consumer, offset을 배우고, 파티션별 순서와 offset을 직접 판단해 봅니다.
+estimated_minutes: 40
+# Technologies this unit teaches (content/technologies.yaml). Load technologies first.
+technologies: [kafka]
+status: published
+
+activities:
+  - slug: order-event-flow
+    kind: reading
+    title: "주문 이벤트로 보는 Kafka: producer와 topic"
+    required: true
+    body_md: |
+      온라인 쇼핑몰에서 주문이 들어오면 결제, 재고, 배송, 알림 서비스가 각자 일을 해야 합니다.
+      주문 서비스가 이 서비스들을 하나씩 직접 호출하는 대신, **"주문이 생성되었다"는 이벤트를
+      Kafka에 한 번 기록**하고 필요한 서비스가 각자 읽어 가게 할 수 있습니다.
+
+      | 용어 | 주문 사례에서의 역할 |
+      |---|---|
+      | **producer** | 이벤트를 Kafka에 쓰는 쪽. 여기서는 주문 서비스 |
+      | **record**(메시지) | 하나의 이벤트. key, value, timestamp 등을 가짐 |
+      | **topic** | 같은 종류의 이벤트를 모아 두는 이름 붙은 로그. 여기서는 `orders` |
+      | **consumer** | topic에서 이벤트를 읽는 쪽. 결제·배송·알림 서비스 |
+
+      주문 서비스는 주문 하나의 상태가 바뀔 때마다 `orders` topic에 record를 씁니다.
+
+      ```text
+      key = order-1001   value = {"type": "OrderCreated", ...}
+      key = order-1001   value = {"type": "PaymentCompleted", ...}
+      key = order-1001   value = {"type": "OrderShipped", ...}
+      ```
+
+      ### 읽어도 지워지지 않는다
+      Kafka의 topic은 **추가만 되는 로그**입니다. consumer가 record를 읽어도 record는 삭제되지
+      않고, topic에 설정된 보존 기간(retention)이나 크기 기준에 따라 정리됩니다. 그래서
+      결제 서비스와 알림 서비스가 **같은 주문 이벤트를 서로 독립적으로** 읽을 수 있습니다.
+
+  - slug: partitions-and-offsets
+    kind: reading
+    title: "partition과 offset: 순서는 어디까지 보장될까"
+    required: true
+    body_md: |
+      topic은 하나 이상의 **partition**으로 나뉩니다. `orders` topic이 partition 3개
+      (P0, P1, P2)로 되어 있다고 해 봅시다. record는 반드시 이 중 **한 partition의 끝에** 추가됩니다.
+
+      ### offset
+      partition 안의 각 record에는 0부터 1씩 늘어나는 번호인 **offset**이 붙습니다.
+      offset은 **partition마다 따로** 셉니다. 그래서 P0에도 offset 3이 있고 P1에도 offset 3이
+      있을 수 있으며, "topic 전체에서 offset 3"이라는 말은 성립하지 않습니다.
+      record의 위치는 topic, partition, offset **세 값의 조합**으로 정해집니다.
+
+      ### key와 partition
+      record에 key가 있으면 producer의 기본 partitioner는 key의 해시로 partition을 고릅니다.
+      그래서 **partition 수가 바뀌지 않고 기본 partitioner를 쓰는 동안** 같은 key는 같은
+      partition에 들어갑니다. 주문 ID를 key로 쓰면 `order-1001`의 이벤트 세 개는 같은 partition에
+      쌓입니다. partition 수를 늘리거나 partitioner를 바꾸면 같은 key라도 다른 partition으로 갈 수
+      있습니다. key가 없으면 record가 여러 partition에 흩어질 수 있습니다.
+
+      ### 순서 보장
+      Kafka가 보장하는 것은 **한 partition 안에 기록된 순서**입니다. consumer는 한 partition의
+      record를 기록된 순서, 즉 offset 순서대로 읽습니다. 서로 다른 partition의 record 사이에는
+      전체 순서가 없습니다.
+
+      같은 partition에 들어간다고 해서 producer가 **보낸 순서가 그대로 기록된다는 뜻은 아닙니다**.
+      전송에 실패해 다시 보내는 경우처럼, producer 설정에 따라 기록 순서가 보낸 순서와 달라질 수
+      있습니다. 보낸 순서까지 지켜야 한다면 producer 설정(예: idempotence)도 함께 확인해야 합니다.
+      이 단원의 예시와 문제는 **이미 기록된 순서**를 기준으로 합니다.
+
+      | 상황 | 순서 |
+      |---|---|
+      | `order-1001`의 생성, 결제, 배송이 같은 partition에 이 순서로 기록됨 | 기록된 순서(offset 순서)대로 읽힘 |
+      | `order-1001`의 생성과 `order-2002`의 생성 (다른 partition) | 둘 사이의 순서는 보장되지 않음 |
+
+      주문 하나의 상태 변화처럼 순서가 중요한 이벤트는 **같은 key로 보내 같은 partition에 모으는
+      것**이 출발점입니다.
+
+  - slug: consumer-groups-and-commits
+    kind: reading
+    title: "consumer group과 offset commit"
+    required: true
+    body_md: |
+      ### consumer group
+      같은 일을 나눠 맡는 consumer들은 하나의 **consumer group**(`group.id`)으로 묶입니다.
+      group 안에서 **한 partition은 한 consumer에게만** 배정됩니다.
+
+      - 배송 서비스 consumer 3개, partition 3개 → 하나씩 맡음
+      - consumer 4개, partition 3개 → 한 consumer는 **배정받을 partition이 없어 쉼**
+      - 결제 group과 알림 group은 **서로 다른 group**이므로 각자 모든 partition을 읽고, 어디까지
+        읽었는지(offset)도 **group마다 따로** 관리함. 한 group이 읽어도 다른 group의 위치는 그대로임
+
+      ### offset commit
+      consumer는 어디까지 처리했는지를 **offset commit**으로 Kafka에 남깁니다.
+      commit하는 값은 **다음에 읽을 offset**, 즉 마지막으로 처리한 offset + 1입니다.
+
+      ```text
+      P1: offset 0 1 2 3 4 | 5 6 7
+                           ^ committed offset = 5
+      ```
+
+      consumer가 재시작되거나 partition이 다른 consumer에게 넘어가면, 그 group은
+      **commit된 offset부터** 다시 읽습니다.
+
+      ### commit된 offset이 없을 때
+      처음 시작한 group이거나, commit된 위치의 record가 보존 기간이 지나 이미 정리된 경우처럼
+      **사용할 수 있는 commit된 offset이 없으면** consumer 설정 `auto.offset.reset`이 시작 위치를
+      정합니다. `earliest`면 partition에 남아 있는 가장 오래된 record부터, `latest`면 그 뒤에
+      새로 들어오는 record부터 읽습니다. 그래서 새 group이라고 해서 항상 처음부터 읽는 것은 아닙니다.
+
+      처리를 마친 뒤 commit하기 전에 consumer가 멈추면, 다음 consumer는 이전 commit 위치부터
+      읽으므로 **같은 record를 한 번 더 처리**할 수 있습니다. 그래서 결제처럼 중복이 문제가 되는
+      처리는 주문 ID로 이미 처리했는지 확인하는 등 **중복에 안전하게** 만들어야 합니다.
+
+  - slug: official-intro
+    kind: external
+    title: "공식 문서: Apache Kafka 소개"
+    url: https://kafka.apache.org/documentation/#introduction
+    required: false
+    body_md: |
+      Apache Kafka 공식 문서의 Introduction 절입니다. "Main Concepts and Terminology"에서
+      topic, partition, offset, consumer group 설명을 이 단원의 내용과 비교해 보세요.
+
+  - slug: practice-partition-order
+    kind: exercise
+    title: "직접 해보기: 파티션별 순서와 offset 판단"
+    required: true
+    body_md: |
+      `orders` topic은 partition 3개이고, producer는 **주문 ID를 key**로 씁니다.
+      아래는 각 partition에 쌓인 record입니다.
+
+      ```text
+      P0: offset 0  order-1001 OrderCreated
+          offset 1  order-3003 OrderCreated
+          offset 2  order-1001 PaymentCompleted
+          offset 3  order-1001 OrderShipped
+
+      P1: offset 0  order-2002 OrderCreated
+          offset 1  order-2002 PaymentCompleted
+          offset 2  order-4004 OrderCreated
+          offset 3  order-2002 OrderCancelled
+
+      P2: offset 0  order-5005 OrderCreated
+      ```
+
+      배송 group의 consumer A가 P1을 맡고 있습니다. A는 P1의 offset 0, 1, 2를 처리했고
+      **offset 2까지 처리한 뒤 commit**했습니다. 그다음 offset 3을 처리하던 중 A가 멈췄고,
+      P1은 같은 group의 consumer B에게 넘어갔습니다.
+
+      다음 질문에 답해 보세요.
+
+      1. `order-1001`의 세 이벤트는 어떤 순서로 읽히나요? 그 순서는 보장되나요?
+      2. P0의 `order-3003 OrderCreated`(offset 1)와 P1의 `order-2002 OrderCreated`(offset 0) 중
+         어느 쪽이 먼저 처리되는지 Kafka가 보장하나요?
+      3. A가 commit한 offset 값은 무엇인가요?
+      4. B는 P1의 어느 offset부터 읽나요? 이때 어떤 이벤트를 처리하게 되나요?
+      5. `order-2002 OrderCancelled`를 A가 이미 일부 처리했다면 어떤 문제가 생길 수 있고,
+         어떻게 대비해야 할까요?
+
+      ### 풀이 (먼저 직접 답한 뒤 확인하세요)
+
+      1. 생성(P0 offset 0) → 결제(offset 2) → 배송(offset 3). 같은 key라 같은 partition에 있으므로
+         partition 안의 순서가 보장됩니다.
+      2. 보장하지 않습니다. 서로 다른 partition의 record 사이에는 전체 순서가 없습니다.
+      3. 3입니다. commit하는 값은 마지막으로 처리한 offset(2) + 1, 즉 다음에 읽을 offset입니다.
+      4. offset 3부터 읽고 `order-2002 OrderCancelled`를 처리합니다.
+      5. 같은 취소 이벤트가 두 번 처리될 수 있습니다. 주문 ID와 이벤트를 기준으로 이미 처리했는지
+         확인하는 등 중복에 안전하게 처리해야 합니다.
+
+quiz:
+  pass_score_percent: 80
+  questions:
+    - key: same-key-order
+      type: single
+      prompt: >-
+        주문 ID를 key로 보낸 `order-1001`의 OrderCreated, PaymentCompleted, OrderShipped가
+        같은 partition에 이 순서로 기록되었습니다. 이 partition을 읽는 consumer에 대한 설명으로
+        옳은 것은 무엇일까요?
+      explanation: >-
+        Kafka는 한 partition 안에 기록된 순서를 보장하므로, consumer는 세 이벤트를 기록된 순서,
+        즉 offset 순서대로 읽습니다. producer가 보낸 순서와 기록된 순서가 같은지는 producer 설정에
+        따라 달라질 수 있어, 이 문제는 이미 기록된 순서를 전제로 합니다.
+      choices:
+        - { key: a, label: "세 이벤트를 기록된 순서(offset 순서)대로 읽는다", correct: true }
+        - { key: b, label: "같은 partition이라도 세 이벤트를 읽는 순서는 매번 달라질 수 있다" }
+        - { key: c, label: "topic 전체에서 offset이 매겨지므로 다른 주문과도 순서가 정해진다" }
+        - { key: d, label: "consumer가 읽은 이벤트는 삭제되므로 한 번만 읽을 수 있다" }
+
+    - key: offset-scope
+      type: single
+      prompt: "offset에 대한 설명으로 옳은 것은 무엇일까요?"
+      explanation: >-
+        offset은 partition마다 0부터 따로 매겨지는 위치 번호입니다. record의 위치는
+        (topic, partition, offset)으로 정해집니다.
+      choices:
+        - { key: a, label: "topic 전체에서 유일한 번호이다" }
+        - { key: b, label: "partition 안에서 record의 위치를 나타내며 partition마다 따로 매겨진다", correct: true }
+        - { key: c, label: "consumer가 record를 읽을 때마다 새로 매겨진다" }
+        - { key: d, label: "record의 key에서 계산된 해시값이다" }
+
+    - key: resume-after-commit
+      type: single
+      prompt: >-
+        consumer가 P1의 offset 0~4를 처리하고 offset 5를 commit한 뒤 재시작했습니다.
+        같은 group으로 다시 읽기 시작하는 offset은 무엇일까요?
+      explanation: >-
+        commit된 값은 다음에 읽을 offset입니다. 재시작한 consumer는 commit된 offset 5부터 읽습니다.
+      choices:
+        - { key: a, label: "0" }
+        - { key: b, label: "4" }
+        - { key: c, label: "5", correct: true }
+        - { key: d, label: "6" }
+
+    - key: idle-consumer
+      type: single
+      prompt: >-
+        partition이 3개인 `orders` topic을 같은 consumer group의 consumer 4개가 읽습니다.
+        어떻게 될까요?
+      explanation: >-
+        group 안에서 한 partition은 한 consumer에게만 배정됩니다. partition보다 consumer가
+        많으면 남는 consumer는 배정받을 partition이 없어 쉬게 됩니다.
+      choices:
+        - { key: a, label: "4개가 모든 partition을 나눠 같은 record를 함께 처리한다" }
+        - { key: b, label: "3개가 partition을 하나씩 맡고 1개는 배정받지 못해 쉰다", correct: true }
+        - { key: c, label: "partition이 자동으로 4개로 늘어난다" }
+        - { key: d, label: "group에 consumer를 4개 둘 수 없어 오류가 난다" }
+
+    - key: kafka-facts
+      type: multiple
+      prompt: "옳은 설명을 **모두** 고르세요."
+      explanation: >-
+        서로 다른 partition 사이에는 전체 순서가 없고, 서로 다른 consumer group은 같은 record를
+        독립적으로 읽습니다. record는 읽어도 지워지지 않고 보존 기준에 따라 정리되며,
+        commit 전에 consumer가 멈추면 같은 record가 다시 처리될 수 있습니다.
+      choices:
+        - { key: a, label: "서로 다른 partition의 record 사이에는 전체 순서가 보장되지 않는다", correct: true }
+        - { key: b, label: "결제 group과 알림 group은 같은 주문 이벤트를 각자 읽을 수 있다", correct: true }
+        - { key: c, label: "consumer가 record를 읽으면 그 record는 topic에서 삭제된다" }
+        - { key: d, label: "처리 후 commit 전에 consumer가 멈추면 같은 record가 다시 처리될 수 있다", correct: true }
