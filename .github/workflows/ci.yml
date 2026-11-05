@@ -90,7 +90,8 @@ jobs:
 
       - run: npm ci
 
-      # The legacy screens still have known lint errors; only DevHub 2.0 files are enforced.
+      # These DevHub 2.0 files are enforced. The 1.0 screens that had known lint errors
+      # were removed; the full lint below still runs as report only.
       - name: Lint DevHub 2.0 files
         run: >-
           npx eslint vite.config.js src/main.jsx src/api/client.js src/api/client.test.js

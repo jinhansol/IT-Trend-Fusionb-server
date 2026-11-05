@@ -1,7 +1,5 @@
 // src/api/client.js
-// DevHub 2.0 shared API client. New API modules should import `apiClient` from here.
-// The legacy modules (homeAPI.js, devAPI.js, ...) still call the old backend directly
-// and are migrated domain by domain.
+// DevHub 2.0 shared API client. Every API module imports `apiClient` from here.
 //
 // Auth model: the short-lived access token lives only in memory (this module).
 // The refresh token is an httpOnly cookie the browser sends to /api/auth/* only.

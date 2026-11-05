@@ -4,8 +4,7 @@ Run locally (from backend/):
     uv run uvicorn app.main:create_app --factory --reload
 
 Importing this module has no side effects: no database connection, no
-background threads, no external calls. The legacy entry point (backend/main.py)
-is separate and is not imported here.
+background threads, no external calls.
 """
 
 import logging

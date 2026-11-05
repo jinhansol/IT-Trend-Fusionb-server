@@ -17,12 +17,11 @@ export default function AppRouter() {
     <BrowserRouter>
       <HeaderNav />
       <Routes>
-        {/* DevHub 2.0 Home (latest news and Dev articles), News and Dev. The v1
-            Home/DevDashboard (legacy backend) are no longer routed. */}
+        {/* Home (latest news and Dev articles), News and Dev. */}
         <Route path="/" element={<HomePage />} />
         <Route path="/news" element={<NewsPage />} />
         <Route path="/dev" element={<DevPage />} />
-        {/* DevHub 2.0 Career hub. The v1 CareerDashboard (legacy backend) is no longer routed. */}
+        {/* Career hub. */}
         <Route path="/career" element={<CareerHomePage />} />
         {/* Career exploration (P3). Static paths win over /career/:trackSlug; the track
             loader reserves these slugs so no track can be shadowed. */}

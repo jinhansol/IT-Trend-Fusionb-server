@@ -251,7 +251,7 @@ npm ci
 npm run dev                                   # http://localhost:5173
 ```
 
-백엔드 진입점은 2.0 앱 팩토리 `app.main:create_app`(`--factory`)입니다. `backend/main.py`는 1.0 코드이므로 `uvicorn main:app`처럼 실행하지 않습니다.
+백엔드 진입점은 2.0 앱 팩토리 `app.main:create_app`(`--factory`)입니다. 1.0의 실행 코드(`backend/main.py` 등)는 main에서 제거되었습니다(아래 "1.0 → 2.0 주요 변화").
 
 수집은 웹 서버와 별개입니다. `uv run python -m app.jobs diagnose`는 DB 없이 **저장하지 않고** robots.txt 확인 후 접속·파싱·공급량만 확인합니다. 저장 수집(`collect`)은 `sources.yaml`에서 이용 조건이 승인된(`options.terms: approved`) 소스만 실행되며, 현재 승인된 소스는 없습니다. 실제 글 1~2건의 검증은 별도 수동 실험 명령(`uv run python -m app.jobs trial <실행 목록> [--dry-run]`)과 실험 전용 DB로 합니다([안내](docs/devhub-2.0/DevHub-2.0-Manual-Trial.md)).
 
@@ -291,7 +291,14 @@ npm run dev                                   # http://localhost:5173
 | 테스트 | 자동화 테스트 없음 | pytest·Vitest·Playwright, CI 4개 job |
 | 학습 기능 | 로드맵 화면 | 파일 기반 트랙·단원·퀴즈, XP·레벨, 진로·목표 |
 
-1.0의 최종 상태는 `legacy-final-project` 태그로 보존되어 있습니다. 저장소의 `backend/main.py`, `backend/scheduler.py`, `backend/services/` 등은 1.0 코드이며 2.0 앱(`backend/app/`)에서 불러오지 않습니다(테스트로 고정).
+현재 main의 공식 실행 버전은 DevHub 2.0(`backend/app/`, `frontend/src/`)이며, 1.0 전용 실행 코드는 main에서 제거했습니다. 이전 상태는 두 태그로 보존되어 있습니다.
+
+| 태그 | 대상 커밋 | 내용 |
+| :--- | :--- | :--- |
+| `legacy-final-project` | `bcdf13c` | DevHub 1.0(학교 파이널 프로젝트)의 최종 상태 |
+| `devhub-v2-pre-legacy-cleanup` | `b02f6fd` | 1.0 코드를 제거하기 직전의 main(1.0·2.0 코드가 함께 있는 상태) |
+
+2.0 앱이 1.0 모듈을 불러오지 않는다는 점은 테스트(`tests/unit/test_app_startup.py`)로 계속 확인합니다.
 
 ## 문서
 
