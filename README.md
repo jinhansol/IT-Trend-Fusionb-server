@@ -17,7 +17,7 @@ DevHub 2.0은 학교 파이널 프로젝트였던 DevHub 1.0을 새 백엔드·�
   <img src="docs/images/career-unit.png" alt="Career 단원 화면: 기술 링크, 읽기 활동" width="49%">
 </p>
 
-<sub>저장소의 실제 학습 콘텐츠(`backend/content/python`)를 로컬에서 실행한 화면입니다. Home·News·Dev는 국내 소스 이용 조건이 확정되지 않아 아직 실데이터가 없으므로 화면을 싣지 않았습니다(아래 "현재 개발 상태").</sub>
+<sub>저장소의 실제 학습 콘텐츠(`backend/content/python`)를 로컬에서 실행한 화면입니다. Home·News·Dev의 실제 콘텐츠는 수동 실험으로 로컬 실험 DB에서만 검증했고(아래 "로컬 실데이터 검증"), 이용 조건 때문에 그 데이터와 화면은 저장소에 싣지 않았습니다.</sub>
 
 ---
 
@@ -40,7 +40,7 @@ DevHub 2.0은 학교 파이널 프로젝트였던 DevHub 1.0을 새 백엔드·�
 | **Home** (`/`) | 최신 IT 뉴스 3건 + 최신 개발 아티클 3건을 나란히 보여 주고, News·Dev·Career로 이동하는 진입점 |
 | **News** (`/news`) | 국내 IT 뉴스 목록, 기술 필터(주소에 `?tech=` 유지), 더 보기, 최근 7일 기술 언급량 차트, 마지막 수집 시각·지연 표시. 여러 매체가 같은 기사(정규화 URL이 같은 글)를 실으면 한 건으로 묶어 표시 |
 | **Dev** (`/dev`) | 국내 기업 기술 블로그·개발 커뮤니티를 채널별 게시판으로 표시(제목·출처·게시일·원문 링크). 이용 조건이 확인된 소스의 AI 요약 글이 있을 때만 상단에 최대 2건 강조, 없으면 영역을 숨김 |
-| **Career** (`/career`) | 파일(YAML)로 관리하는 학습 트랙·단원·퀴즈, 단원 완료 XP·레벨, 진로(직무) 탐색, 학습 목표, 기술 단위로 News·Dev와 상호 연결 |
+| **Career** (`/career`) | 파일(YAML)로 관리하는 학습 트랙·단원·퀴즈(공개 트랙: **Python 기초**, **Kafka 기초**), 필수 활동 확인·퀴즈 채점·단원 완료 XP·레벨·진행 기록, 진로(직무) 탐색, 학습 목표, 기술 단위로 News·Dev와 상호 연결 |
 | **계정·설정** | 회원가입·로그인(JWT access token + httpOnly refresh 쿠키), 학습자 유형(선택), 개인화 설정(기본 꺼짐), 관심 기술·역량 자기 평가 |
 
 - 게스트도 Home·News·Dev·Career 공개 콘텐츠를 모두 볼 수 있습니다. 개인화 데이터는 공개 응답에 영향을 주지 않습니다(테스트로 고정).
@@ -118,6 +118,47 @@ sequenceDiagram
 - 정기 수집(`--group`)은 Gemini를 호출하지 않습니다. AI 요약은 `summarize` 명령을 따로, 호출 상한(`--max-calls`)과 함께 실행합니다.
 
 </details>
+
+## 로컬 실데이터 검증 (2026-11-05)
+
+### 일반 수집과 수동 실험(trial)
+
+| | 일반 RSS/API 수집 (`collect`) | 수동 실험 (`trial`) |
+| :--- | :--- | :--- |
+| 대상 | `sources.yaml`에서 이용 조건이 승인된(`options.terms: approved`) 소스 전체 | 실행 목록(저장소 밖 YAML)에 적은 원문 1건씩, 최대 2건 |
+| 현재 상태 | **정상 운영되는 자동 공급 아님**. 승인된 소스가 News 0곳, Dev 0곳이고 정기 실행(cron)도 설치하지 않음 | 실제 News 1건과 Dev 1건을 수집·저장·표시함 |
+| 저장 범위 | 승인된 소스 정책에 따름 | 제목·원문 URL·출처·게시일(+ 허용 시 저자)만. 본문·소개문·이미지·다른 피드 항목은 저장하지 않음 |
+| 안전장치 | 승인 게이트, 허용 목록, robots.txt, 주소·리다이렉트 검사 | 위 검사에 더해 아래를 적용 |
+
+수동 실험(trial)에만 적용되는 안전장치:
+- 실행 목록의 기간을 최대 48시간으로 제한하고, 요청 직전·첫 쓰기 직전·커밋 직전에 만료를 다시 확인합니다.
+- robots.txt 규칙을 읽지 못하면 거부합니다.
+- 재시도와 리다이렉트를 하지 않고, 입력 호스트에만 요청합니다.
+- 실제 쓰기 연결의 DB명·계정명이 `devhub_experiment`인지 확인합니다.
+
+실험으로 만든 출처는 `paused`, `terms: unverified`로 저장되므로 일반 `collect`나 AI 요약 대상이 되지 않습니다. 실행 방법은 [수동 실험 안내](docs/devhub-2.0/DevHub-2.0-Manual-Trial.md)에 있습니다.
+
+### 결과
+
+- **실데이터:** 클라우드 실험 환경의 전용 DB(`devhub_experiment`, 전용 계정, 루프백 전용)에 Kafka 주제의 News 공지 1건과 Dev 블로그 글 1건을 저장했습니다.
+  - 두 글 모두 `kafka` 기술로 자동 태깅되어 Home·News·Dev에 표시됐습니다.
+  - 같은 URL을 다시 저장해도 새 행은 0건이었습니다.
+- **기술 `kafka` 기반 통합 탐색:** Home의 Kafka 태그로 `/news?tech=kafka`에 가고, "같은 기술의 Dev 글 보기"로 `/dev?tech=kafka`에 갑니다. 거기서 관련 학습 링크로 Career "Kafka 기초" 단원에 이어집니다.
+- **실제 콘텐츠 데이터는 이 GitHub 저장소에 포함되지 않습니다.** 저장소에는 수집 코드, 합성 테스트 픽스처, 학습 콘텐츠(YAML)만 있습니다.
+
+| 검증 | 내용 | 결과 |
+| :--- | :--- | :--- |
+| **Kafka v1** (최초 단원) | 실제 News·Dev 콘텐츠로 9단계 동선. Home → Kafka News → Kafka Dev → Career 단원 → 회원가입 → 필수 활동 4/4 → 퀴즈 통과(+100 XP, Lv 2) → 재로그인 후 기록 유지 → 단원 상태 유지 | 9단계 모두 통과 |
+| **Kafka v2** (설명 수정 후) | 수정된 학습 설명과 퀴즈를 다시 적재(퀴즈 v2 공개, v1 응시 기록 보존). 새 사용자가 단원부터 v2 퀴즈를 채점받고 완료 XP를 받는지, 기존 사용자의 완료·XP가 유지되는지 확인. **9단계 동선 전체를 v2로 다시 실행하지는 않음** | 새 사용자 5/5 통과·+100 XP, 기존 사용자 기록 유지 |
+
+### 제한 사항
+
+- **이용 조건**
+  - Dev 글: 그 글 하나에 대해서만 CC BY 4.0 표시를 확인했습니다.
+  - News 공지: 약관 조항을 확인하지 못해, 본인만 보는 로컬 임시 저장으로만 사용했습니다.
+- **라이선스 표시:** 일반 카드는 출처·저자·게시일·원문 링크를 표시하지만, 라이선스 링크는 AI 요약 영역에서만 나옵니다.
+- **공지 파서:** 특정 사이트의 `__NEXT_DATA__` 구조에 의존합니다. 구조가 바뀌면 추측하지 않고 실패합니다.
+- **실행 환경:** 검증은 회수될 수 있는 클라우드 컨테이너에서 했습니다. 장기 운영과 서버 배포는 계획하지 않습니다.
 
 ## 문제 해결 사례
 
@@ -201,7 +242,7 @@ uv sync
 uv run alembic upgrade head
 uv run python -m app.content_loader technologies content/technologies.yaml
 uv run python -m app.content_loader sources content/sources.yaml
-uv run python -m app.content_loader load content/python
+uv run python -m app.content_loader load content/python content/kafka   # Python 기초 · Kafka 기초 트랙
 uv run uvicorn app.main:create_app --factory --reload     # http://127.0.0.1:8000/api/docs
 
 # 3) 프론트엔드 (새 터미널)
@@ -210,26 +251,30 @@ npm ci
 npm run dev                                   # http://localhost:5173
 ```
 
-수집은 웹 서버와 별개입니다. `uv run python -m app.jobs diagnose`는 DB 없이 **저장하지 않고** robots.txt 확인 후 접속·파싱·공급량만 확인합니다. 저장 수집(`collect`)은 `sources.yaml`에서 이용 조건이 승인된(`options.terms: approved`) 소스만 실행되며, 현재 승인된 소스는 없습니다.
+백엔드 진입점은 2.0 앱 팩토리 `app.main:create_app`(`--factory`)입니다. `backend/main.py`는 1.0 코드이므로 `uvicorn main:app`처럼 실행하지 않습니다.
+
+수집은 웹 서버와 별개입니다. `uv run python -m app.jobs diagnose`는 DB 없이 **저장하지 않고** robots.txt 확인 후 접속·파싱·공급량만 확인합니다. 저장 수집(`collect`)은 `sources.yaml`에서 이용 조건이 승인된(`options.terms: approved`) 소스만 실행되며, 현재 승인된 소스는 없습니다. 실제 글 1~2건의 검증은 별도 수동 실험 명령(`uv run python -m app.jobs trial <실행 목록> [--dry-run]`)과 실험 전용 DB로 합니다([안내](docs/devhub-2.0/DevHub-2.0-Manual-Trial.md)).
 
 ## 테스트와 현재 개발 상태
 
-| 구분 | 결과 (2026-11-03, `main` 기준) |
+| 구분 | 결과 (2026-11-05, `main` `797087f`의 [GitHub Actions 실행](https://github.com/jinhansol/IT-Trend-Fusionb-server/actions/runs/41946106634) 기준) |
 | :--- | :--- |
-| 백엔드 | pytest 670개 통과 (단위 + MariaDB 통합), ruff, `alembic check` |
-| 프론트엔드 | Vitest 90개 통과, ESLint(2.0 파일), 빌드 |
-| E2E | Playwright 13개 시나리오 통과 (학습 완료·XP, 진로·목표, 개인화 설정, Home→News/Dev/Career 이동, News 직접 접속·새로고침, Dev 채널·정렬, 모바일 폭) |
-| CI | GitHub Actions 4개 job: Backend · Frontend · E2E · Secret scan |
+| 백엔드 | pytest 894개 통과 (단위 + MariaDB 통합), ruff, 마이그레이션 검사. robots.txt UTF-8 BOM 회귀 테스트를 더한 이 변경에서는 로컬 897개 통과 |
+| 프론트엔드 | Vitest 94개 통과, ESLint(2.0 파일), 빌드 |
+| E2E | Playwright 14개 시나리오 통과 |
+| CI | GitHub Actions 4개 job 모두 통과: Backend · Frontend · E2E · Secret scan |
 
 **완료(코드·테스트로 확인)**
 
 - Home·News·Dev·Career 화면과 공개 API, 인증, 학습 진행·퀴즈·XP, 진로 탐색·학습 목표, 개인화 설정
+- Career 공개 트랙 2개(Python 기초, Kafka 기초)와 기술 `kafka` 기준의 Home·News·Dev·Career 통합 탐색
+- 수동 실험 명령(`app.jobs trial`)으로 실제 News 1건·Dev 1건을 실험 전용 DB에 저장·태깅·표시 (위 "로컬 실데이터 검증")
 - RSS/API 수집기(중복 방지, 오류 격리, 동시 실행 잠금, 수집 기록), 정기 수집 그룹·cron 줄 생성(재설치 시 중복 방지), 수집 통계 리포트
 - Gemini 요약 엔진(JSON 스키마 검증, 호출 상한, 실패 분류, 결과 재사용). 실제 Gemini 호출로 요약 생성·저장·표시를 검증한 것은 **과거 PoC**(합성 기사와 당시 소스 1건)이며, 지금은 요약이 허용된 국내 소스가 없어 어떤 콘텐츠에도 자동 적용되지 않습니다
 
 **아직 운영되지 않는 것**
 
-- **실제 콘텐츠**: 국내 소스의 이용 조건이 확정되지 않아 자동 수집 허용 소스가 **News 0곳, Dev 0곳**이고, 개발 DB의 Home·News·Dev는 빈 상태입니다.
+- **실제 콘텐츠 자동 공급**: 국내 소스의 이용 조건이 확정되지 않아 자동 수집 허용 소스가 **News 0곳, Dev 0곳**입니다. 실제 글은 수동 실험으로 로컬 실험 DB에만 2건 저장해 검증했고, 개발 DB의 Home·News·Dev와 이 저장소에는 실제 콘텐츠가 없습니다.
 - **정기 실행**: cron 구성은 코드로 준비됐지만(`python -m app.jobs crontab`), 운영 서버에 설치하지 않았습니다(배포 없음).
 - **미구현**: 개인화 추천(P5), News→Dev 연관 글(NO-GO 보류), URL이 다른 같은 기사 묶기(현재는 정규화 URL이 같은 경우만 한 건으로 묶음).
 
@@ -253,6 +298,7 @@ npm run dev                                   # http://localhost:5173
 | 문서 | 내용 |
 | :--- | :--- |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Windows 로컬 실행, 콘텐츠 반영, 수집 dry-run·저장, 테스트, 오류 해결 |
+| [수동 실험 안내](docs/devhub-2.0/DevHub-2.0-Manual-Trial.md) | `app.jobs trial`: 원문 1~2건, 최대 48시간, 실험 전용 DB와 계정 |
 | [docs/devhub-2.0/](docs/devhub-2.0/README.md) | 설계·검토 기록 (작성 시점 기준) |
 | [E0 소스 이용 조건 검토](docs/devhub-2.0/DevHub-2.0-E0-Source-Terms-Review.md) | 해외·국내 소스 약관·robots.txt 검토 |
 | [1.0·2.0 수집 구조 비교](docs/devhub-2.0/DevHub-2.0-News-Collection-Architecture-Comparison.md) | 1.0 수집 방식과 2.0 재설계 근거 |

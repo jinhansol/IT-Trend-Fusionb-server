@@ -50,7 +50,9 @@ def _groups(text: str) -> list[tuple[list[str], list[tuple[bool, str]]]]:
     agents: list[str] = []
     rules: list[tuple[bool, str]] = []
     in_rules = False
-    for raw in text.splitlines():
+    # A UTF-8 byte order mark would otherwise glue onto the first key ("\ufeffUser-agent")
+    # and drop the first group's rules.
+    for raw in text.removeprefix("\ufeff").splitlines():
         line = raw.split("#", 1)[0].strip()
         if ":" not in line:
             continue
