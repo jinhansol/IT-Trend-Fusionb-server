@@ -55,20 +55,28 @@ activities:
 
       ### key와 partition
       record에 key가 있으면 producer의 기본 partitioner는 key의 해시로 partition을 고릅니다.
-      partition 수가 바뀌지 않는 한 **같은 key는 항상 같은 partition**에 들어갑니다.
-      주문 ID를 key로 쓰면 `order-1001`의 이벤트 세 개는 모두 같은 partition에 쌓입니다.
-      key가 없으면 record가 여러 partition에 흩어질 수 있습니다.
+      그래서 **partition 수가 바뀌지 않고 기본 partitioner를 쓰는 동안** 같은 key는 같은
+      partition에 들어갑니다. 주문 ID를 key로 쓰면 `order-1001`의 이벤트 세 개는 같은 partition에
+      쌓입니다. partition 수를 늘리거나 partitioner를 바꾸면 같은 key라도 다른 partition으로 갈 수
+      있습니다. key가 없으면 record가 여러 partition에 흩어질 수 있습니다.
 
       ### 순서 보장
-      Kafka는 **한 partition 안에서만** 쓰인 순서대로 읽히는 것을 보장합니다.
-      서로 다른 partition의 record 사이에는 전체 순서가 없습니다.
+      Kafka가 보장하는 것은 **한 partition 안에 기록된 순서**입니다. consumer는 한 partition의
+      record를 기록된 순서, 즉 offset 순서대로 읽습니다. 서로 다른 partition의 record 사이에는
+      전체 순서가 없습니다.
+
+      같은 partition에 들어간다고 해서 producer가 **보낸 순서가 그대로 기록된다는 뜻은 아닙니다**.
+      전송에 실패해 다시 보내는 경우처럼, producer 설정에 따라 기록 순서가 보낸 순서와 달라질 수
+      있습니다. 보낸 순서까지 지켜야 한다면 producer 설정(예: idempotence)도 함께 확인해야 합니다.
+      이 단원의 예시와 문제는 **이미 기록된 순서**를 기준으로 합니다.
 
       | 상황 | 순서 |
       |---|---|
-      | `order-1001`의 생성 → 결제 → 배송 (같은 key, 같은 partition) | 보장됨 |
-      | `order-1001`의 생성과 `order-2002`의 생성 (다른 partition) | 보장되지 않음 |
+      | `order-1001`의 생성, 결제, 배송이 같은 partition에 이 순서로 기록됨 | 기록된 순서(offset 순서)대로 읽힘 |
+      | `order-1001`의 생성과 `order-2002`의 생성 (다른 partition) | 둘 사이의 순서는 보장되지 않음 |
 
-      주문 하나의 상태 변화처럼 **순서가 중요한 이벤트는 같은 key**로 보내야 합니다.
+      주문 하나의 상태 변화처럼 순서가 중요한 이벤트는 **같은 key로 보내 같은 partition에 모으는
+      것**이 출발점입니다.
 
   - slug: consumer-groups-and-commits
     kind: reading
@@ -81,7 +89,8 @@ activities:
 
       - 배송 서비스 consumer 3개, partition 3개 → 하나씩 맡음
       - consumer 4개, partition 3개 → 한 consumer는 **배정받을 partition이 없어 쉼**
-      - 결제 group과 알림 group은 **서로 다른 group**이므로 각자 모든 partition을 처음부터 끝까지 읽음
+      - 결제 group과 알림 group은 **서로 다른 group**이므로 각자 모든 partition을 읽고, 어디까지
+        읽었는지(offset)도 **group마다 따로** 관리함. 한 group이 읽어도 다른 group의 위치는 그대로임
 
       ### offset commit
       consumer는 어디까지 처리했는지를 **offset commit**으로 Kafka에 남깁니다.
@@ -94,6 +103,12 @@ activities:
 
       consumer가 재시작되거나 partition이 다른 consumer에게 넘어가면, 그 group은
       **commit된 offset부터** 다시 읽습니다.
+
+      ### commit된 offset이 없을 때
+      처음 시작한 group이거나, commit된 위치의 record가 보존 기간이 지나 이미 정리된 경우처럼
+      **사용할 수 있는 commit된 offset이 없으면** consumer 설정 `auto.offset.reset`이 시작 위치를
+      정합니다. `earliest`면 partition에 남아 있는 가장 오래된 record부터, `latest`면 그 뒤에
+      새로 들어오는 record부터 읽습니다. 그래서 새 group이라고 해서 항상 처음부터 읽는 것은 아닙니다.
 
       처리를 마친 뒤 commit하기 전에 consumer가 멈추면, 다음 consumer는 이전 commit 위치부터
       읽으므로 **같은 record를 한 번 더 처리**할 수 있습니다. 그래서 결제처럼 중복이 문제가 되는
@@ -160,14 +175,16 @@ quiz:
     - key: same-key-order
       type: single
       prompt: >-
-        주문 ID를 key로 `order-1001`의 OrderCreated, PaymentCompleted, OrderShipped를 순서대로
-        보냈습니다. partition 수는 바뀌지 않았습니다. 옳은 설명은 무엇일까요?
+        주문 ID를 key로 보낸 `order-1001`의 OrderCreated, PaymentCompleted, OrderShipped가
+        같은 partition에 이 순서로 기록되었습니다. 이 partition을 읽는 consumer에 대한 설명으로
+        옳은 것은 무엇일까요?
       explanation: >-
-        같은 key는 같은 partition에 들어가고, Kafka는 한 partition 안의 순서를 보장합니다.
-        그래서 세 이벤트는 보낸 순서대로 읽힙니다.
+        Kafka는 한 partition 안에 기록된 순서를 보장하므로, consumer는 세 이벤트를 기록된 순서,
+        즉 offset 순서대로 읽습니다. producer가 보낸 순서와 기록된 순서가 같은지는 producer 설정에
+        따라 달라질 수 있어, 이 문제는 이미 기록된 순서를 전제로 합니다.
       choices:
-        - { key: a, label: "세 이벤트가 같은 partition에 들어가 보낸 순서대로 읽힌다", correct: true }
-        - { key: b, label: "세 이벤트가 여러 partition에 나뉘어 순서가 보장되지 않는다" }
+        - { key: a, label: "세 이벤트를 기록된 순서(offset 순서)대로 읽는다", correct: true }
+        - { key: b, label: "같은 partition이라도 세 이벤트를 읽는 순서는 매번 달라질 수 있다" }
         - { key: c, label: "topic 전체에서 offset이 매겨지므로 다른 주문과도 순서가 정해진다" }
         - { key: d, label: "consumer가 읽은 이벤트는 삭제되므로 한 번만 읽을 수 있다" }
 
